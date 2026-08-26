@@ -177,7 +177,10 @@ export class GameEngine {
   }
 
   private updateEnemies(deltaTime: number) {
-    this.enemies.update(deltaTime, CONFIG.WIDTH, CONFIG.HEIGHT);
+    const bulletRequests = this.enemies.update(deltaTime, CONFIG.WIDTH, CONFIG.HEIGHT);
+    for (const req of bulletRequests) {
+      this.bullets.acquireAngled(req.x, req.y, req.angle);
+    }
   }
 
   private updatePowerUps(deltaTime: number) {

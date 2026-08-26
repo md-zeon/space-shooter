@@ -6,6 +6,8 @@ export interface Bullet {
   width: number;
   height: number;
   speed: number;
+  vx: number;
+  vy: number;
   isPlayer: boolean;
   active: boolean;
 }
@@ -31,6 +33,8 @@ export class BulletPool {
       width: CONFIG.BULLET_WIDTH,
       height: CONFIG.BULLET_HEIGHT,
       speed: CONFIG.BULLET_SPEED,
+      vx: 0,
+      vy: 0,
       isPlayer: true,
       active: false,
     };
@@ -46,6 +50,29 @@ export class BulletPool {
     bullet.speed = isPlayer ? CONFIG.BULLET_SPEED : CONFIG.ENEMY_BULLET_SPEED;
     bullet.active = true;
 
+    if (isPlayer) {
+      bullet.vx = 0;
+      bullet.vy = -bullet.speed;
+    }
+
+    this.active.push(bullet);
+    return bullet;
+  }
+
+  acquireAngled(x: number, y: number, angle: number): Bullet {
+    let bullet = this.pool.pop();
+    if (!bullet) {
+      bullet = this.create();
+    }
+
+    bullet.isPlayer = false;
+    bullet.speed = CONFIG.ENEMY_BULLET_SPEED;
+    bullet.active = true;
+    bullet.x = x;
+    bullet.y = y;
+    bullet.vx = Math.cos(angle) * bullet.speed;
+    bullet.vy = Math.sin(angle) * bullet.speed;
+
     this.active.push(bullet);
     return bullet;
   }
@@ -60,12 +87,13 @@ export class BulletPool {
   }
 
   update(deltaTime: number, canvasHeight: number) {
+    const dt60 = deltaTime * 60;
     for (let i = this.active.length - 1; i >= 0; i--) {
       const bullet = this.active[i];
       if (!bullet.active) continue;
 
-      const speed = bullet.speed * deltaTime * 60;
-      bullet.y += bullet.isPlayer ? -speed : speed;
+      bullet.x += bullet.vx * dt60;
+      bullet.y += bullet.vy * dt60;
 
       // Remove if off screen
       if (bullet.y < -bullet.height || bullet.y > canvasHeight + bullet.height) {

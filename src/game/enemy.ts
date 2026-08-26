@@ -15,13 +15,21 @@ export interface Enemy {
   patternTimer: number;
 }
 
+export interface EnemyBulletRequest {
+  x: number;
+  y: number;
+  angle: number;
+}
+
 export class EnemyManager {
   private enemies: Enemy[] = [];
   private spawnTimer: number = 0;
   private spawnRate: number = CONFIG.ENEMY_SPAWN_RATE;
   private difficulty: number = 1;
 
-  update(deltaTime: number, canvasWidth: number, canvasHeight: number) {
+  update(deltaTime: number, canvasWidth: number, canvasHeight: number): EnemyBulletRequest[] {
+    const bulletRequests: EnemyBulletRequest[] = [];
+
     // Spawn enemies
     this.spawnTimer += deltaTime * 1000;
     if (this.spawnTimer >= this.spawnRate) {
@@ -53,11 +61,73 @@ export class EnemyManager {
           break;
       }
 
+      // Shooting
+      enemy.shootTimer += deltaTime * 1000;
+      const request = this.checkShoot(enemy, canvasWidth, canvasHeight);
+      if (request) {
+        bulletRequests.push(...request);
+      }
+
       // Remove if off screen
       if (enemy.y > canvasHeight + enemy.height) {
         this.remove(enemy);
       }
     }
+
+    return bulletRequests;
+  }
+
+  private checkShoot(enemy: Enemy, canvasWidth: number, canvasHeight: number): EnemyBulletRequest[] | null {
+    const requests: EnemyBulletRequest[] = [];
+
+    switch (enemy.type) {
+      case 'basic': {
+        const interval = Math.max(2000, 4000 - this.difficulty * 200);
+        if (enemy.shootTimer >= interval) {
+          enemy.shootTimer = 0;
+          requests.push({
+            x: enemy.x + enemy.width / 2,
+            y: enemy.y + enemy.height,
+            angle: Math.PI / 2, // straight down
+          });
+        }
+        break;
+      }
+      case 'advanced': {
+        const interval = Math.max(1500, 3000 - this.difficulty * 150);
+        if (enemy.shootTimer >= interval) {
+          enemy.shootTimer = 0;
+          // Aimed shot (toward player's typical position - center-ish)
+          const targetX = canvasWidth / 2;
+          const dx = targetX - (enemy.x + enemy.width / 2);
+          const dy = canvasHeight - enemy.y;
+          const angle = Math.atan2(dy, dx);
+          requests.push({
+            x: enemy.x + enemy.width / 2,
+            y: enemy.y + enemy.height,
+            angle,
+          });
+        }
+        break;
+      }
+      case 'elite': {
+        const interval = Math.max(800, 1800 - this.difficulty * 100);
+        if (enemy.shootTimer >= interval) {
+          enemy.shootTimer = 0;
+          // Spread shot (3 bullets)
+          for (let i = -1; i <= 1; i++) {
+            requests.push({
+              x: enemy.x + enemy.width / 2,
+              y: enemy.y + enemy.height,
+              angle: Math.PI / 2 + i * 0.3,
+            });
+          }
+        }
+        break;
+      }
+    }
+
+    return requests.length > 0 ? requests : null;
   }
 
   spawn(canvasWidth: number) {
@@ -73,7 +143,7 @@ export class EnemyManager {
       health: type === 'elite' ? 3 : type === 'advanced' ? 2 : 1,
       type,
       active: true,
-      shootTimer: 0,
+      shootTimer: Math.random() * 1000, // random initial offset
       patternTimer: 0,
     };
 
