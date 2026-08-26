@@ -109,10 +109,9 @@ export class InputManager {
     // Register as click for menu interaction
     this.pendingClick = { x: pos.x, y: pos.y };
 
-    // Shooting is always active during touch in auto mode; in manual mode too
+    // Always shooting during touch (auto-fire handles it)
     this.wasShooting = false;
     this.isShooting = true;
-    this.pendingClick = null;
   };
 
   private handleTouchMove = (e: TouchEvent) => {
