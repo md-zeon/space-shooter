@@ -108,7 +108,7 @@ export class Renderer {
     ctx.font = '8px "Press Start 2P"';
     ctx.fillStyle = CONFIG.COLORS.TEXT_WAVE;
     ctx.textAlign = 'right';
-    ctx.fillText(`WAVE ${wave}`, this.canvasWidth - 10, 50);
+    ctx.fillText(`WAVE ${wave}`, this.canvasWidth - 10, 62);
 
     // Lives as ship icons
     ctx.fillStyle = CONFIG.COLORS.TEXT_MUTED;
