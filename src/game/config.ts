@@ -11,6 +11,9 @@ export const CONFIG = {
   INVINCIBLE_DURATION: 2000,
   FIRE_RATE: 150,
 
+  // Settings
+  SHOOT_MODE: 'auto' as 'auto' | 'manual',
+
   // Bullets
   BULLET_SPEED: 10,
   BULLET_WIDTH: 4,
@@ -53,6 +56,7 @@ export const CONFIG = {
     BACKGROUND: '#050A1A',
     STAR: '#FFFFFF',
     TEXT: '#F0F8FF',
+    TEXT_MUTED: '#6A7080',
   },
 
   // Timing

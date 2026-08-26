@@ -65,7 +65,8 @@ export class Renderer {
     score: number,
     lives: number,
     level: number,
-    highScore: number
+    highScore: number,
+    shootMode: 'auto' | 'manual'
   ) {
     ctx.save();
 
@@ -99,6 +100,12 @@ export class Renderer {
       ctx.fillStyle = CONFIG.COLORS.PLAYER;
       ctx.fillRect(this.canvasWidth - 20 - i * 18, 58, 12, 12);
     }
+
+    // Shoot mode indicator
+    ctx.font = '6px "Press Start 2P"';
+    ctx.fillStyle = CONFIG.COLORS.TEXT_MUTED;
+    ctx.textAlign = 'left';
+    ctx.fillText(`FIRE: ${shootMode.toUpperCase()}`, 10, this.canvasHeight - 10);
 
     ctx.restore();
   }

@@ -1,12 +1,15 @@
 export class InputManager {
   private keys: Set<string> = new Set();
+  private keysJustPressed: Set<string> = new Set();
   private touchStartX: number = 0;
   private touchStartY: number = 0;
   private touchCurrentX: number = 0;
   private touchCurrentY: number = 0;
   private isTouching: boolean = false;
   private isShooting: boolean = false;
+  private wasShooting: boolean = false;
   private canvas: HTMLCanvasElement | null = null;
+  private shootMode: 'auto' | 'manual' = 'auto';
 
   init(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -38,12 +41,16 @@ export class InputManager {
   }
 
   private handleKeyDown = (e: KeyboardEvent) => {
+    if (!this.keys.has(e.key)) {
+      this.keysJustPressed.add(e.key);
+    }
     this.keys.add(e.key);
     if (e.key === ' ') e.preventDefault();
   };
 
   private handleKeyUp = (e: KeyboardEvent) => {
     this.keys.delete(e.key);
+    this.keysJustPressed.delete(e.key);
   };
 
   private handleTouchStart = (e: TouchEvent) => {
@@ -61,6 +68,7 @@ export class InputManager {
     // Right 60% = shoot zone
     const relX = this.touchStartX / rect.width;
     if (relX > 0.4) {
+      this.wasShooting = false;
       this.isShooting = true;
     }
   };
@@ -87,8 +95,35 @@ export class InputManager {
     return this.keys.has(key);
   }
 
+  isKeyJustPressed(key: string): boolean {
+    return this.keysJustPressed.has(key);
+  }
+
+  clearJustPressed() {
+    this.keysJustPressed.clear();
+  }
+
+  setShootMode(mode: 'auto' | 'manual') {
+    this.shootMode = mode;
+  }
+
+  getShootMode(): 'auto' | 'manual' {
+    return this.shootMode;
+  }
+
   isShootingActive(): boolean {
-    return this.keys.has(' ') || this.isShooting;
+    if (this.shootMode === 'auto') {
+      return this.keys.has(' ') || this.isShooting;
+    } else {
+      // Manual mode: only fire on initial press
+      const spaceJustPressed = this.isKeyJustPressed(' ');
+      const touchJustPressed = this.isShooting && !this.wasShooting;
+      return spaceJustPressed || touchJustPressed;
+    }
+  }
+
+  updateShootingState() {
+    this.wasShooting = this.isShooting;
   }
 
   getTouchDelta(): { dx: number; dy: number } {

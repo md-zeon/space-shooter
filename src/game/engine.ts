@@ -57,6 +57,7 @@ export class GameEngine {
     this.renderer.init(CONFIG.WIDTH, CONFIG.HEIGHT);
 
     this.loadHighScore();
+    this.loadShootMode();
 
     this.lastTime = performance.now();
     this.loop(this.lastTime);
@@ -94,6 +95,9 @@ export class GameEngine {
     this.updateParticles(deltaTime);
     this.checkCollisions();
     this.checkLevelUp();
+
+    this.input.clearJustPressed();
+    this.input.updateShootingState();
   }
 
   private handleInput() {
@@ -380,7 +384,14 @@ export class GameEngine {
     this.bullets.render(this.ctx);
     renderPlayer(this.ctx, this.player, performance.now());
     this.particles.render(this.ctx);
-    this.renderer.renderHUD(this.ctx, this.score, this.player.lives, this.level, this.highScore);
+    this.renderer.renderHUD(
+      this.ctx,
+      this.score,
+      this.player.lives,
+      this.level,
+      this.highScore,
+      this.input.getShootMode()
+    );
 
     if (this.state === 'paused') {
       this.renderer.renderPauseScreen(this.ctx);
@@ -428,6 +439,33 @@ export class GameEngine {
     try {
       localStorage.setItem('space-shooter-highscore', this.highScore.toString());
     } catch {}
+  }
+
+  private loadShootMode() {
+    try {
+      const saved = localStorage.getItem('space-shooter-shootmode');
+      if (saved === 'auto' || saved === 'manual') {
+        this.input.setShootMode(saved);
+      }
+    } catch {}
+  }
+
+  private saveShootMode(mode: 'auto' | 'manual') {
+    try {
+      localStorage.setItem('space-shooter-shootmode', mode);
+    } catch {}
+  }
+
+  toggleShootMode(): 'auto' | 'manual' {
+    const current = this.input.getShootMode();
+    const newMode = current === 'auto' ? 'manual' : 'auto';
+    this.input.setShootMode(newMode);
+    this.saveShootMode(newMode);
+    return newMode;
+  }
+
+  getShootMode(): 'auto' | 'manual' {
+    return this.input.getShootMode();
   }
 
   getState(): GameState {
