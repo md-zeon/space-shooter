@@ -83,7 +83,10 @@ export class Renderer {
     shootMode: 'auto' | 'manual',
     powerLevel: number,
     bombs: number,
-    chain: number
+    chain: number,
+    laserCharge: number = 0,
+    laserActive: boolean = false,
+    narrowTimer: number = 0,
   ) {
     ctx.save();
 
@@ -156,6 +159,46 @@ export class Renderer {
       ctx.globalAlpha = 0.8 + Math.sin(Date.now() * 0.01) * 0.2;
       ctx.fillText(`x${chain}`, this.canvasWidth / 2, 40);
       ctx.globalAlpha = 1;
+    }
+
+    // Laser charge bar (only at max power)
+    if (powerLevel >= 5) {
+      const lBarW = 50;
+      const lBarH = 3;
+      const lBarX = 10;
+      const lBarY = this.canvasHeight - 22;
+      ctx.fillStyle = '#1A1D2E';
+      ctx.fillRect(lBarX, lBarY, lBarW, lBarH);
+      const chargePercent = laserActive ? 1 : Math.min(1, laserCharge / 3000);
+      ctx.fillStyle = laserActive ? CONFIG.COLORS.LASER_BEAM : CONFIG.COLORS.POWERUP_NARROW;
+      ctx.shadowColor = ctx.fillStyle;
+      ctx.shadowBlur = laserActive ? 8 : 3;
+      ctx.fillRect(lBarX, lBarY, lBarW * chargePercent, lBarH);
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = CONFIG.COLORS.TEXT_MUTED;
+      ctx.font = '5px "Press Start 2P"';
+      ctx.textAlign = 'left';
+      ctx.fillText(laserActive ? 'LASER' : 'CHARGE', lBarX, lBarY - 2);
+    }
+
+    // Narrow indicator
+    if (narrowTimer > 0) {
+      const nBarW = 50;
+      const nBarH = 3;
+      const nBarX = 10;
+      const nBarY = this.canvasHeight - 30;
+      const nPercent = narrowTimer / 8000;
+      ctx.fillStyle = '#1A1D2E';
+      ctx.fillRect(nBarX, nBarY, nBarW, nBarH);
+      ctx.fillStyle = CONFIG.COLORS.POWERUP_NARROW;
+      ctx.shadowColor = CONFIG.COLORS.POWERUP_NARROW;
+      ctx.shadowBlur = 5;
+      ctx.fillRect(nBarX, nBarY, nBarW * nPercent, nBarH);
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = CONFIG.COLORS.TEXT_MUTED;
+      ctx.font = '5px "Press Start 2P"';
+      ctx.textAlign = 'left';
+      ctx.fillText('NARROW', nBarX, nBarY - 2);
     }
 
     // Shoot mode

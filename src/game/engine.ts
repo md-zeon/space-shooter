@@ -118,6 +118,8 @@ export class GameEngine {
         this.updatePowerUps(deltaTime);
         this.updateBomb(deltaTime);
         this.updateChain(deltaTime);
+        this.updateNarrow(deltaTime);
+        this.updateLaser(deltaTime);
         this.checkCollisions();
         this.checkWaveAnnouncements();
         this.checkWarning();
@@ -243,14 +245,31 @@ export class GameEngine {
   private shoot() {
     const now = performance.now();
     if (now - this.player.lastFireTime < this.player.fireRate) return;
+    if (this.player.laserActive) return;
 
     this.player.lastFireTime = now;
     this.audio.resume();
     this.audio.playShoot();
 
+    const narrow = this.player.narrowTimer > 0;
     const bullet = this.bullets.acquire(true);
     bullet.x = this.player.x + this.player.width / 2 - bullet.width / 2;
     bullet.y = this.player.y;
+
+    if (narrow) {
+      const count = CONFIG.NARROW_BULLET_COUNT;
+      const spread = CONFIG.NARROW_SPREAD;
+      for (let i = 0; i < count; i++) {
+        if (i === 0) continue;
+        const b = this.bullets.acquire(true);
+        b.x = this.player.x + this.player.width / 2 - 2;
+        b.y = this.player.y + 5;
+        const angle = -Math.PI / 2 + (i - (count - 1) / 2) * spread;
+        b.vx = Math.cos(angle) * CONFIG.BULLET_SPEED * 0.3;
+        b.vy = Math.sin(angle) * CONFIG.BULLET_SPEED;
+      }
+      return;
+    }
 
     const lvl = this.player.powerLevel;
     if (lvl >= 2) {
@@ -369,6 +388,95 @@ export class GameEngine {
       this.chainTimer -= deltaTime * 1000;
       if (this.chainTimer <= 0) {
         this.chain = 0;
+      }
+    }
+  }
+
+  private updateNarrow(deltaTime: number) {
+    if (this.player.narrowTimer > 0) {
+      this.player.narrowTimer -= deltaTime * 1000;
+      if (this.player.narrowTimer <= 0) {
+        this.player.narrowTimer = 0;
+      }
+    }
+  }
+
+  private updateLaser(deltaTime: number) {
+    if (this.player.powerLevel < CONFIG.MAX_POWER_LEVEL) {
+      this.player.laserCharge = 0;
+      this.player.laserActive = false;
+      return;
+    }
+
+    if (this.player.laserActive) {
+      this.player.laserTimer -= deltaTime * 1000;
+      this.player.laserDmgTimer -= deltaTime * 1000;
+
+      if (this.player.laserDmgTimer <= 0) {
+        this.player.laserDmgTimer = CONFIG.LASER_TICK;
+        this.dealLaserDamage();
+      }
+
+      if (this.player.laserTimer <= 0) {
+        this.player.laserActive = false;
+        this.player.laserCharge = 0;
+      }
+    } else {
+      this.player.laserCharge += deltaTime * 1000;
+      if (this.player.laserCharge >= CONFIG.LASER_CHARGE_TIME) {
+        this.player.laserActive = true;
+        this.player.laserTimer = CONFIG.LASER_DURATION;
+        this.player.laserDmgTimer = 0;
+        this.audio.playExplosion();
+        this.particles.addShake(4);
+      }
+    }
+  }
+
+  private dealLaserDamage() {
+    if (!this.player.laserActive) return;
+
+    const lx = this.player.x + this.player.width / 2 - CONFIG.LASER_WIDTH / 2;
+    const ly = 0;
+    const lw = CONFIG.LASER_WIDTH;
+    const lh = this.player.y;
+
+    const enemies = this.enemies.getActive();
+    for (const e of enemies) {
+      if (!e.active) continue;
+      if (checkCollision(
+        { x: lx, y: ly, width: lw, height: lh },
+        { x: e.x, y: e.y, width: e.width, height: e.height }
+      )) {
+        e.health -= CONFIG.LASER_DAMAGE;
+        e.flashTimer = 50;
+        if (e.health <= 0) this.onEnemyKilled(e);
+      }
+    }
+
+    if (this.boss.isBossActive()) {
+      const boss = this.boss.getBoss();
+      if (boss && checkCollision(
+        { x: lx, y: ly, width: lw, height: lh },
+        { x: boss.x, y: boss.y, width: boss.width, height: boss.height }
+      )) {
+        this.boss.takeDamage(CONFIG.LASER_DAMAGE);
+      }
+
+      if (boss) {
+        for (const m of boss.minions) {
+          if (!m.active) continue;
+          if (checkCollision(
+            { x: lx, y: ly, width: lw, height: lh },
+            { x: m.x, y: m.y, width: m.width, height: m.height }
+          )) {
+            const killed = this.boss.takeMinionDamage(m, CONFIG.LASER_DAMAGE);
+            if (killed) {
+              this.score += 50;
+              this.particles.emitExplosion(m.x + m.width / 2, m.y + m.height / 2, 0.5);
+            }
+          }
+        }
       }
     }
   }
@@ -613,6 +721,9 @@ export class GameEngine {
       case 'bomb':
         this.player.bombs = Math.min(CONFIG.BOMB_COUNT, this.player.bombs + 1);
         break;
+      case 'narrow':
+        this.player.narrowTimer = CONFIG.POWERUP_NARROW_DURATION;
+        break;
     }
   }
 
@@ -799,13 +910,34 @@ export class GameEngine {
       ctx.restore();
     }
 
+    if (this.player.laserActive) {
+      ctx.save();
+      const lx = this.player.x + this.player.width / 2;
+      const lw = CONFIG.LASER_WIDTH;
+      const flash = Math.floor(this.player.laserTimer / 50) % 2;
+      const alpha = flash ? 0.9 : 0.7;
+
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = CONFIG.COLORS.LASER_BEAM;
+      ctx.shadowColor = CONFIG.COLORS.LASER_BEAM;
+      ctx.shadowBlur = 20;
+      ctx.fillRect(lx - lw / 2, 0, lw, this.player.y);
+
+      ctx.globalAlpha = alpha * 0.3;
+      ctx.fillRect(lx - lw * 2, 0, lw * 4, this.player.y);
+
+      ctx.restore();
+    }
+
     this.particles.render(ctx);
 
     this.renderer.renderHUD(
       ctx, this.score, this.player.lives,
       this.waves.getWaveNumber(), this.highScore,
       this.input.getShootMode(), this.player.powerLevel,
-      this.player.bombs, this.chain
+      this.player.bombs, this.chain,
+      this.player.laserCharge, this.player.laserActive,
+      this.player.narrowTimer
     );
 
     const bossState = this.boss.getBoss();

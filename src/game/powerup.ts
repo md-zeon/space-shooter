@@ -1,6 +1,6 @@
 import { CONFIG } from './config';
 
-export type PowerUpType = 'shield' | 'weapon' | 'health' | 'score' | 'bomb';
+export type PowerUpType = 'shield' | 'weapon' | 'health' | 'score' | 'bomb' | 'narrow';
 
 export interface PowerUp {
   x: number;
@@ -38,11 +38,12 @@ export class PowerUpManager {
   spawn(canvasWidth: number) {
     const roll = Math.random();
     let type: PowerUpType;
-    if (roll < 0.35) type = 'weapon';
-    else if (roll < 0.55) type = 'score';
-    else if (roll < 0.75) type = 'shield';
-    else if (roll < 0.9) type = 'health';
-    else type = 'bomb';
+    if (roll < 0.30) type = 'weapon';
+    else if (roll < 0.48) type = 'score';
+    else if (roll < 0.63) type = 'shield';
+    else if (roll < 0.78) type = 'health';
+    else if (roll < 0.90) type = 'bomb';
+    else type = 'narrow';
 
     this.powerUps.push({
       x: 30 + Math.random() * (canvasWidth - 60),
@@ -85,6 +86,7 @@ export class PowerUpManager {
         case 'health': color = CONFIG.COLORS.POWERUP_HEALTH; label = '+'; break;
         case 'score': color = CONFIG.COLORS.POWERUP_SCORE; label = '$'; break;
         case 'bomb': color = CONFIG.COLORS.POWERUP_BOMB; label = 'B'; break;
+        case 'narrow': color = CONFIG.COLORS.POWERUP_NARROW; label = 'N'; break;
       }
 
       const pulse = 1 + Math.sin(powerUp.pulsePhase) * 0.1;

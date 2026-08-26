@@ -16,6 +16,11 @@ export interface Player {
   tilt: number;
   targetTilt: number;
   thrusterPhase: number;
+  laserCharge: number;
+  laserActive: boolean;
+  laserTimer: number;
+  laserDmgTimer: number;
+  narrowTimer: number;
 }
 
 export function createPlayer(canvasWidth: number, canvasHeight: number): Player {
@@ -35,6 +40,11 @@ export function createPlayer(canvasWidth: number, canvasHeight: number): Player 
     tilt: 0,
     targetTilt: 0,
     thrusterPhase: 0,
+    laserCharge: 0,
+    laserActive: false,
+    laserTimer: 0,
+    laserDmgTimer: 0,
+    narrowTimer: 0,
   };
 }
 

@@ -42,6 +42,19 @@ export const CONFIG = {
   BOSS_HEIGHT: 80,
   MAX_BOSS_MINIONS: 6,
 
+  // Laser beam (max power super attack)
+  LASER_CHARGE_TIME: 3000,
+  LASER_DURATION: 1500,
+  LASER_WIDTH: 10,
+  LASER_DAMAGE: 2,
+  LASER_TICK: 100,
+
+  // Narrow powerup
+  POWERUP_NARROW_DURATION: 8000,
+  NARROW_BULLET_COUNT: 5,
+  NARROW_SPREAD: 0.08,
+  NARROW_BONUS_DAMAGE: 1,
+
   // Particles
   MAX_PARTICLES: 300,
   PARTICLE_SPEED: 3,
@@ -79,6 +92,8 @@ export const CONFIG = {
     POWERUP_HEALTH: '#05FFA1',
     POWERUP_SCORE: '#FFD600',
     POWERUP_BOMB: '#FF8C00',
+    POWERUP_NARROW: '#4488FF',
+    LASER_BEAM: '#00FFFF',
     BOMB_FLASH: 'rgba(255, 255, 255, 0.8)',
     BACKGROUND: '#050A1A',
     STAR: '#FFFFFF',
