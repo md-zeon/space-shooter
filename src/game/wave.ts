@@ -323,7 +323,7 @@ export class WaveManager {
       this.waveClearTimer = 0;
     }
 
-    if (this.pendingSpawns.length === 0 && activeEnemyCount === 0 && !this.waitingForClear) {
+    if (this.pendingSpawns.length === 0 && newSpawns.length === 0 && activeEnemyCount === 0 && !this.waitingForClear) {
       this.betweenWaves = true;
       this.betweenWaveTimer = 1000;
     }
