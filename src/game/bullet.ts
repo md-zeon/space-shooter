@@ -128,26 +128,6 @@ export class BulletPool {
     }
   }
 
-  render(ctx: CanvasRenderingContext2D) {
-    for (const bullet of this.active) {
-      if (!bullet.active) continue;
-
-      ctx.save();
-      ctx.shadowColor = bullet.isPlayer
-        ? CONFIG.COLORS.BULLET_PLAYER
-        : CONFIG.COLORS.BULLET_ENEMY;
-      ctx.shadowBlur = 10;
-
-      ctx.fillStyle = bullet.isPlayer
-        ? CONFIG.COLORS.BULLET_PLAYER
-        : CONFIG.COLORS.BULLET_ENEMY;
-
-      ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
-
-      ctx.restore();
-    }
-  }
-
   getActive(): Bullet[] {
     return this.active;
   }

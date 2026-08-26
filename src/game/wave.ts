@@ -198,7 +198,6 @@ export class WaveManager {
   private difficulty: number = 1;
   private waveNumber: number = 0;
   private bossActive: boolean = false;
-  private totalWavesInStage: number = 0;
   private waveAnnouncementTimer: number = 0;
   private announcedWave: number = -1;
 
@@ -294,7 +293,7 @@ export class WaveManager {
     if (this.waitingForClear) {
       if (activeEnemyCount === 0) {
         this.waveClearTimer += deltaTime * 1000;
-        if (this.waveClearTimer >= 500) {
+        if (this.waveClearTimer >= this.waveClearThreshold) {
           this.waitingForClear = false;
           this.betweenWaves = true;
           this.betweenWaveTimer = 1500;
@@ -319,7 +318,7 @@ export class WaveManager {
       this.spawnDelay += cmd.delay > 0 ? 50 : 0;
     }
 
-    if (this.pendingSpawns.length === 0 && activeEnemyCount <= 2 && !this.waitingForClear) {
+    if (this.pendingSpawns.length === 0 && activeEnemyCount > 0 && activeEnemyCount <= 2 && !this.waitingForClear) {
       this.waitingForClear = true;
       this.waveClearTimer = 0;
     }
@@ -371,7 +370,6 @@ export class WaveManager {
 
   onBossDefeated() {
     this.bossActive = false;
-    this.currentWaveIndex++;
     this.betweenWaves = true;
     this.betweenWaveTimer = 2000;
   }

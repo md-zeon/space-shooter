@@ -59,6 +59,7 @@ export class ParticleSystem {
     for (let i = 0; i < count; i++) {
       let particle = this.particles.find((p) => !p.active);
       if (!particle) {
+        if (this.particles.length >= CONFIG.MAX_PARTICLES * 2) continue;
         particle = this.create();
         this.particles.push(particle);
       }

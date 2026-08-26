@@ -30,7 +30,6 @@ export class GameEngine {
 
   private state: GameState = 'menu';
   private score: number = 0;
-  private level: number = 1;
   private highScore: number = 0;
   private isNewHighScore: boolean = false;
 
@@ -161,7 +160,6 @@ export class GameEngine {
         if (this.input.isKeyJustPressed('Escape') || this.input.consumeBackButton()) {
           this.state = 'paused';
         }
-        // Bomb
         if (this.input.isKeyJustPressed('b') || this.input.isKeyJustPressed('B')) {
           this.activateBomb();
         }
@@ -188,16 +186,15 @@ export class GameEngine {
         break;
     }
 
-    if (this.input.isKeyDown('m')) this.audio.toggleMute();
+    if (this.input.isKeyJustPressed('m')) this.audio.toggleMute();
   }
 
   private updateWaveSpawning(deltaTime: number) {
-    if (this.boss.isBossActive() || this.warningActive) return;
+    if (this.boss.isBossActive() || this.warningActive || this.bossDefeatTimer > 0) return;
 
     const activeEnemyCount = this.enemies.getActive().length;
     const spawnCommands = this.waves.update(deltaTime, activeEnemyCount, CONFIG.WIDTH);
 
-    // Sync difficulty
     this.enemies.setDifficulty(this.waves.getDifficulty());
 
     for (const cmd of spawnCommands) {
@@ -207,7 +204,6 @@ export class GameEngine {
       );
     }
 
-    // Check if wave manager wants to start a boss
     if (this.waves.isBossWaveNow() && !this.boss.isBossActive() && !this.warningActive) {
       this.warningActive = true;
       this.warningTimer = 2500;
@@ -295,7 +291,6 @@ export class GameEngine {
     this.particles.flash('#FFFFFF', 0.7);
     this.particles.addShake(10);
 
-    // Kill all enemy bullets
     const bullets = this.bullets.getActive();
     for (const b of bullets) {
       if (!b.isPlayer && b.active) {
@@ -304,7 +299,6 @@ export class GameEngine {
       }
     }
 
-    // Damage all enemies
     const enemies = this.enemies.getActive();
     for (const e of enemies) {
       if (!e.active) continue;
@@ -314,7 +308,6 @@ export class GameEngine {
       }
     }
 
-    // Damage boss
     if (this.boss.isBossActive()) {
       this.boss.takeDamage(10);
     }
@@ -329,7 +322,6 @@ export class GameEngine {
       return;
     }
 
-    // Continuous damage
     const enemies = this.enemies.getActive();
     for (const e of enemies) {
       if (!e.active) continue;
@@ -396,6 +388,7 @@ export class GameEngine {
           enemy.health--;
           enemy.flashTimer = 100;
           bullet.active = false;
+          this.bullets.release(bullet);
           this.audio.playEnemyHit();
 
           if (enemy.health <= 0) {
@@ -407,10 +400,12 @@ export class GameEngine {
             3, CONFIG.COLORS.BULLET_PLAYER,
             { speed: 2, size: 1.5 }
           );
+          break;
         }
       }
 
-      // Player bullets vs boss
+      if (!bullet.active) continue;
+
       if (this.boss.isBossActive()) {
         const boss = this.boss.getBoss();
         if (boss && checkCollision(
@@ -418,6 +413,7 @@ export class GameEngine {
           { x: boss.x, y: boss.y, width: boss.width, height: boss.height }
         )) {
           bullet.active = false;
+          this.bullets.release(bullet);
           const died = this.boss.takeDamage(1);
           this.audio.playBossHit();
           this.particles.emit(
@@ -432,6 +428,7 @@ export class GameEngine {
 
     // Enemy bullets vs player
     if (!this.player.isInvincible && !this.bombActive) {
+      let hit = false;
       for (const bullet of bullets) {
         if (bullet.isPlayer || !bullet.active) continue;
 
@@ -439,8 +436,12 @@ export class GameEngine {
           { x: bullet.x, y: bullet.y, width: bullet.width, height: bullet.height },
           { x: this.player.x, y: this.player.y, width: this.player.width, height: this.player.height }
         )) {
-          this.onPlayerHit();
           bullet.active = false;
+          this.bullets.release(bullet);
+          if (!hit) {
+            hit = true;
+            this.onPlayerHit();
+          }
         }
       }
     }
@@ -456,6 +457,7 @@ export class GameEngine {
         )) {
           this.onPlayerHit();
           this.onEnemyKilled(enemy);
+          break;
         }
       }
     }
@@ -471,8 +473,9 @@ export class GameEngine {
       }
     }
 
-    // Power-ups vs player
+    // Power-ups vs player — collect removals to avoid mutating array during iteration
     const powerUps = this.powerUps.getActive();
+    const toRemove: { type: string }[] = [];
     for (const powerUp of powerUps) {
       if (!powerUp.active) continue;
 
@@ -481,17 +484,25 @@ export class GameEngine {
         { x: this.player.x, y: this.player.y, width: this.player.width, height: this.player.height }
       )) {
         this.onPowerUpCollected(powerUp);
-        this.powerUps.remove(powerUp);
+        toRemove.push(powerUp);
       }
+    }
+    for (const p of toRemove) {
+      this.powerUps.remove(p as any);
     }
   }
 
-  private onEnemyKilled(enemy: { x: number; y: number; width: number; height: number; health?: number; type?: string }) {
+  private onEnemyKilled(enemy: { x: number; y: number; width: number; height: number; health?: number; type?: string; active?: boolean }) {
+    if (enemy.active === false) return;
+    enemy.active = false;
+
+    const waveNumber = this.waves.getWaveNumber();
+    const level = Math.floor(waveNumber / 5) + 1;
+
     this.chain++;
     this.chainTimer = CONFIG.CHAIN_TIMEOUT;
-
     const chainMultiplier = Math.min(this.chain, 10);
-    this.score += CONFIG.SCORE_PER_ENEMY * this.level * chainMultiplier;
+    this.score += CONFIG.SCORE_PER_ENEMY * level * chainMultiplier;
 
     if (enemy.type === 'elite') {
       this.audio.playExplosion();
@@ -501,7 +512,6 @@ export class GameEngine {
       this.particles.emitExplosion(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, 0.8);
     }
 
-    // Power-up drops from elite enemies
     if (enemy.type === 'elite' && Math.random() < 0.4) {
       this.powerUps.spawnAt(enemy.x + enemy.width / 2, enemy.y, 'weapon');
     }
@@ -510,7 +520,11 @@ export class GameEngine {
   private onBossDefeated() {
     this.boss.clear();
     this.bullets.clear();
-    this.score += CONFIG.SCORE_BONUS_BOSS * this.level;
+
+    const waveNumber = this.waves.getWaveNumber();
+    const level = Math.floor(waveNumber / 5) + 1;
+    this.score += CONFIG.SCORE_BONUS_BOSS * level;
+
     this.audio.playBossDeath();
     this.particles.emitBigExplosion(CONFIG.WIDTH / 2, 100);
     this.bossDefeatTimer = 3000;
@@ -528,6 +542,7 @@ export class GameEngine {
   private onPlayerHit() {
     this.player.lives--;
     this.chain = 0;
+    this.player.isInvincible = true;
     this.audio.playDamage();
     this.particles.addShake(8);
     this.particles.flash('#FF0000', 0.3);
@@ -535,7 +550,6 @@ export class GameEngine {
     if (this.player.lives <= 0) {
       this.gameOver();
     } else {
-      this.player.isInvincible = true;
       this.player.invincibleTimer = CONFIG.INVINCIBLE_DURATION;
       this.player.powerLevel = Math.max(1, this.player.powerLevel - 1);
 
@@ -569,10 +583,10 @@ export class GameEngine {
         this.player.lives = Math.min(CONFIG.MAX_LIVES, this.player.lives + 1);
         break;
       case 'score':
-        this.score += 500 * this.level;
+        this.score += 500 * (Math.floor(this.waves.getWaveNumber() / 5) + 1);
         break;
       case 'bomb':
-        this.player.bombs = Math.min(5, this.player.bombs + 1);
+        this.player.bombs = Math.min(CONFIG.BOMB_COUNT, this.player.bombs + 1);
         break;
     }
   }
@@ -600,7 +614,6 @@ export class GameEngine {
   private startGame() {
     this.state = 'playing';
     this.score = 0;
-    this.level = 1;
     this.chain = 0;
     this.chainTimer = 0;
     this.isNewHighScore = false;
@@ -662,15 +675,8 @@ export class GameEngine {
     if (!this.ctx) return;
     const ctx = this.ctx;
 
-    // Hitstop freeze
-    if (this.particles.isHitstopped() && this.state === 'playing') {
-      this.renderGameFrame(ctx);
-      return;
-    }
-
     ctx.clearRect(0, 0, CONFIG.WIDTH, CONFIG.HEIGHT);
 
-    // Screen shake
     const shake = this.particles.getShakeOffset();
     ctx.save();
     ctx.translate(shake.x, shake.y);
@@ -700,7 +706,6 @@ export class GameEngine {
 
     ctx.restore();
 
-    // Hover state
     const mouse = this.input.getMousePosition();
     if (mouse) {
       const item = this.renderer.hitTestMenu(mouse.x, mouse.y);
@@ -717,7 +722,6 @@ export class GameEngine {
     }
     this.powerUps.render(ctx);
 
-    // Render enemy bullets first, then player bullets on top
     const bullets = this.bullets.getActive();
     ctx.save();
     for (const bullet of bullets) {
@@ -747,7 +751,6 @@ export class GameEngine {
 
     renderPlayer(ctx, this.player, performance.now());
 
-    // Bomb effect
     if (this.bombActive) {
       ctx.save();
       const progress = 1 - this.bombTimer / CONFIG.BOMB_DURATION;
@@ -771,7 +774,6 @@ export class GameEngine {
 
     this.particles.render(ctx);
 
-    // HUD
     this.renderer.renderHUD(
       ctx, this.score, this.player.lives,
       this.waves.getWaveNumber(), this.highScore,
@@ -779,7 +781,6 @@ export class GameEngine {
       this.player.bombs, this.chain
     );
 
-    // Boss HP bar
     const boss = this.boss.getBoss();
     if (boss && (boss.active || boss.dying)) {
       this.renderer.renderBossHP(ctx, boss);
@@ -787,7 +788,6 @@ export class GameEngine {
 
     this.pauseBtnBounds = this.renderer.renderPauseButton(ctx);
 
-    // Wave announcement
     if (this.waveAnnounceTimer > 0) {
       this.renderer.renderWaveAnnouncement(
         ctx,
@@ -797,7 +797,6 @@ export class GameEngine {
       );
     }
 
-    // Warning
     if (this.warningActive) {
       this.renderer.renderWarning(ctx, this.warningTimer);
     }
@@ -821,11 +820,9 @@ export class GameEngine {
     const cx = boss.x + boss.width / 2;
     const cy = boss.y + boss.height / 2;
 
-    // Glow
     ctx.shadowColor = CONFIG.COLORS.BOSS_GLOW;
     ctx.shadowBlur = 25;
 
-    // Main body
     ctx.fillStyle = CONFIG.COLORS.BOSS;
     ctx.beginPath();
     ctx.moveTo(cx, boss.y);
@@ -836,7 +833,6 @@ export class GameEngine {
     ctx.closePath();
     ctx.fill();
 
-    // Wings
     ctx.fillStyle = '#CC0044';
     ctx.beginPath();
     ctx.moveTo(boss.x - 10, cy);
@@ -852,7 +848,6 @@ export class GameEngine {
     ctx.closePath();
     ctx.fill();
 
-    // Eye
     ctx.fillStyle = boss.phase === 3 ? '#FF00FF' : boss.phase === 2 ? '#FF6600' : '#FFFFFF';
     ctx.shadowColor = ctx.fillStyle;
     ctx.shadowBlur = 15;
@@ -860,7 +855,6 @@ export class GameEngine {
     ctx.arc(cx, boss.y + boss.height * 0.35, 8, 0, Math.PI * 2);
     ctx.fill();
 
-    // Inner eye
     ctx.fillStyle = '#000000';
     ctx.beginPath();
     ctx.arc(cx, boss.y + boss.height * 0.35, 4, 0, Math.PI * 2);

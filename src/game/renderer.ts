@@ -108,7 +108,7 @@ export class Renderer {
     ctx.font = '8px "Press Start 2P"';
     ctx.fillStyle = CONFIG.COLORS.TEXT_WAVE;
     ctx.textAlign = 'right';
-    ctx.fillText(`WAVE ${wave}`, this.canvasWidth - 10, 20);
+    ctx.fillText(`WAVE ${wave}`, this.canvasWidth - 10, 50);
 
     // Lives as ship icons
     ctx.fillStyle = CONFIG.COLORS.TEXT_MUTED;
@@ -173,9 +173,9 @@ export class Renderer {
     ctx.save();
 
     const barWidth = this.canvasWidth * 0.7;
-    const barHeight = 8;
+    const barHeight = 6;
     const barX = (this.canvasWidth - barWidth) / 2;
-    const barY = 8;
+    const barY = 28;
 
     // Boss name
     ctx.font = '8px "Press Start 2P"';

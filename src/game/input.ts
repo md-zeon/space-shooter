@@ -82,8 +82,10 @@ export class InputManager {
     const rect = this.canvas?.getBoundingClientRect();
     if (!rect) return;
 
-    const x = touch.clientX - rect.left;
-    const y = touch.clientY - rect.top;
+    const scaleX = this.canvas!.width / rect.width;
+    const scaleY = this.canvas!.height / rect.height;
+    const x = (touch.clientX - rect.left) * scaleX;
+    const y = (touch.clientY - rect.top) * scaleY;
 
     this.touchStartX = x;
     this.touchStartY = y;
@@ -94,11 +96,13 @@ export class InputManager {
     // Register as click for menu interaction
     this.pendingClick = { x, y };
 
-    // Right 60% = shoot zone (during gameplay)
-    const relX = x / rect.width;
-    if (relX > 0.4) {
+    // Right 60% = shoot zone (during gameplay) — also consume the click so it doesn't trigger pause
+    const relX = touch.clientX - rect.left;
+    const relWidth = rect.width;
+    if (relX / relWidth > 0.4) {
       this.wasShooting = false;
       this.isShooting = true;
+      this.pendingClick = null;
     }
   };
 
@@ -110,8 +114,10 @@ export class InputManager {
     const rect = this.canvas?.getBoundingClientRect();
     if (!rect) return;
 
-    this.touchCurrentX = touch.clientX - rect.left;
-    this.touchCurrentY = touch.clientY - rect.top;
+    const scaleX = this.canvas!.width / rect.width;
+    const scaleY = this.canvas!.height / rect.height;
+    this.touchCurrentX = (touch.clientX - rect.left) * scaleX;
+    this.touchCurrentY = (touch.clientY - rect.top) * scaleY;
   };
 
   private handleTouchEnd = (e: TouchEvent) => {
@@ -124,8 +130,10 @@ export class InputManager {
     const rect = this.canvas?.getBoundingClientRect();
     if (!rect) return;
 
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
+    const scaleX = this.canvas!.width / rect.width;
+    const scaleY = this.canvas!.height / rect.height;
+    const x = (e.clientX - rect.left) * scaleX;
+    const y = (e.clientY - rect.top) * scaleY;
     this.pendingClick = { x, y };
   };
 
@@ -133,8 +141,10 @@ export class InputManager {
     const rect = this.canvas?.getBoundingClientRect();
     if (!rect) return;
 
-    this.mouseX = e.clientX - rect.left;
-    this.mouseY = e.clientY - rect.top;
+    const scaleX = this.canvas!.width / rect.width;
+    const scaleY = this.canvas!.height / rect.height;
+    this.mouseX = (e.clientX - rect.left) * scaleX;
+    this.mouseY = (e.clientY - rect.top) * scaleY;
     this.hasMouse = true;
   };
 
