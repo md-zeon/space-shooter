@@ -16,15 +16,15 @@ export interface Bullet {
 }
 
 const ENEMY_BULLET_SIZES: Record<string, { w: number; h: number }> = {
-  default: { w: 4, h: 4 },
-  aimed: { w: 3, h: 6 },
-  spread: { w: 4, h: 4 },
-  radial: { w: 4, h: 4 },
-  spiral: { w: 5, h: 5 },
-  burst: { w: 3, h: 5 },
-  fan: { w: 4, h: 4 },
-  ring: { w: 3, h: 3 },
-  laser: { w: 2, h: 10 },
+  default: { w: 6, h: 6 },
+  aimed: { w: 5, h: 8 },
+  spread: { w: 6, h: 6 },
+  radial: { w: 6, h: 6 },
+  spiral: { w: 7, h: 7 },
+  burst: { w: 5, h: 7 },
+  fan: { w: 6, h: 6 },
+  ring: { w: 5, h: 5 },
+  laser: { w: 3, h: 14 },
 };
 
 export class BulletPool {
@@ -66,8 +66,8 @@ export class BulletPool {
     bullet.bulletType = 'player';
     bullet.speed = isPlayer ? CONFIG.BULLET_SPEED : CONFIG.ENEMY_BULLET_SPEED;
     bullet.active = true;
-    bullet.width = CONFIG.BULLET_WIDTH;
-    bullet.height = CONFIG.BULLET_HEIGHT;
+    bullet.width = isPlayer ? CONFIG.BULLET_WIDTH : CONFIG.ENEMY_BULLET_WIDTH;
+    bullet.height = isPlayer ? CONFIG.BULLET_HEIGHT : CONFIG.ENEMY_BULLET_HEIGHT;
 
     if (isPlayer) {
       bullet.vx = 0;

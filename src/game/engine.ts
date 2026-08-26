@@ -885,6 +885,9 @@ export class GameEngine {
       if (bullet.isPlayer) {
         color = CONFIG.COLORS.BULLET_PLAYER;
         ctx.shadowBlur = 8;
+        ctx.fillStyle = color;
+        ctx.shadowColor = color;
+        ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
       } else {
         switch (bullet.bulletType) {
           case 'aimed': color = CONFIG.COLORS.BULLET_ENEMY_AIMED; break;
@@ -892,12 +895,42 @@ export class GameEngine {
           case 'laser': color = CONFIG.COLORS.BULLET_ENEMY_LASER; break;
           default: color = CONFIG.COLORS.BULLET_ENEMY; break;
         }
-        ctx.shadowBlur = 6;
-      }
 
-      ctx.shadowColor = color;
-      ctx.fillStyle = color;
-      ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
+        // Trail effect
+        const trailLen = 10;
+        const nx = bullet.vx !== 0 ? -bullet.vx : 0;
+        const ny = bullet.vy !== 0 ? -bullet.vy : 1;
+        const len = Math.sqrt(nx * nx + ny * ny) || 1;
+        const dx = (nx / len) * 2;
+        const dy = (ny / len) * 2;
+        ctx.globalAlpha = 0.3;
+        ctx.fillStyle = color;
+        for (let t = 1; t <= 3; t++) {
+          ctx.globalAlpha = 0.15 / t;
+          const tw = bullet.width * (1 - t * 0.2);
+          const th = bullet.height * 0.5;
+          ctx.fillRect(
+            bullet.x + bullet.width / 2 - tw / 2 + dx * t * trailLen * 0.3,
+            bullet.y + dy * t * trailLen * 0.3,
+            tw, th
+          );
+        }
+        ctx.globalAlpha = 1;
+
+        // Strong glow
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 14;
+        ctx.fillStyle = color;
+        ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
+
+        // White core for contrast
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+        ctx.fillRect(
+          bullet.x + 1, bullet.y + 1,
+          bullet.width - 2, bullet.height - 2
+        );
+      }
       ctx.restore();
     }
     ctx.restore();
