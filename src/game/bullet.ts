@@ -112,7 +112,7 @@ export class BulletPool {
     this.pool.push(bullet);
   }
 
-  update(deltaTime: number, canvasHeight: number) {
+  update(deltaTime: number, canvasWidth: number, canvasHeight: number) {
     const dt60 = deltaTime * 60;
     for (let i = this.active.length - 1; i >= 0; i--) {
       const bullet = this.active[i];
@@ -122,7 +122,8 @@ export class BulletPool {
       bullet.y += bullet.vy * dt60;
 
       // Remove if off screen
-      if (bullet.y < -bullet.height || bullet.y > canvasHeight + bullet.height) {
+      if (bullet.y < -bullet.height || bullet.y > canvasHeight + bullet.height ||
+          bullet.x < -bullet.width - 10 || bullet.x > canvasWidth + 10) {
         this.release(bullet);
       }
     }
@@ -134,7 +135,7 @@ export class BulletPool {
 
   clear() {
     while (this.active.length > 0) {
-      this.release(this.active[0]);
+      this.pool.push(this.active.pop()!);
     }
   }
 }

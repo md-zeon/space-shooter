@@ -50,27 +50,31 @@ export function createPlayer(canvasWidth: number, canvasHeight: number): Player 
 
 export function updatePlayer(
   player: Player,
-  input: { left: boolean; right: boolean; up: boolean; down: boolean; touchDx: number; touchDy: number },
+  input: { left: boolean; right: boolean; up: boolean; down: boolean; touchTarget: { x: number; y: number } | null },
   deltaTime: number,
   canvasWidth: number,
   canvasHeight: number
 ) {
   const speed = player.speed * deltaTime * 60;
 
-  if (input.left) player.x -= speed;
-  if (input.right) player.x += speed;
-  if (input.up) player.y -= speed;
-  if (input.down) player.y += speed;
-
-  if (input.touchDx !== 0 || input.touchDy !== 0) {
-    player.x += input.touchDx * speed;
-    player.y += input.touchDy * speed;
+  if (input.touchTarget) {
+    // Direct position follow with smoothing
+    const smoothing = 0.25;
+    const targetX = input.touchTarget.x - player.width / 2;
+    const targetY = input.touchTarget.y - player.height / 2;
+    player.x += (targetX - player.x) * smoothing;
+    player.y += (targetY - player.y) * smoothing;
+  } else {
+    if (input.left) player.x -= speed;
+    if (input.right) player.x += speed;
+    if (input.up) player.y -= speed;
+    if (input.down) player.y += speed;
   }
 
   // Banking tilt (input-driven, snappy)
-  if (input.left || input.touchDx < -0.1) {
+  if (input.left || (input.touchTarget && input.touchTarget.x < player.x + player.width / 2 - 2)) {
     player.targetTilt = -1;
-  } else if (input.right || input.touchDx > 0.1) {
+  } else if (input.right || (input.touchTarget && input.touchTarget.x > player.x + player.width / 2 + 2)) {
     player.targetTilt = 1;
   } else {
     player.targetTilt = 0;

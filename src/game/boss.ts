@@ -232,8 +232,7 @@ export class BossManager {
         break;
       case 'abyss': {
         const orbitSpeed = 0.001;
-        this.boss.patternTimer += deltaTime * 1000;
-        const angle = this.boss.patternTimer * orbitSpeed;
+        const angle = this.boss.moveTimer * orbitSpeed;
         const orbitRadius = 80;
         this.boss.x = canvasWidth / 2 - this.boss.width / 2 + Math.cos(angle) * orbitRadius;
         this.boss.y = this.boss.targetY + Math.sin(angle * 0.5) * 20;
@@ -463,7 +462,7 @@ export class BossManager {
     if (!this.boss || !this.boss.active || this.boss.invulnerable || this.boss.dying || this.boss.entering) return false;
 
     this.boss.health -= amount;
-    this.boss.flashTimer = 0;
+    this.boss.flashTimer = 100;
 
     const hpPercent = this.boss.health / this.boss.maxHealth;
 

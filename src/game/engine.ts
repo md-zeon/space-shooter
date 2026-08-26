@@ -53,6 +53,7 @@ export class GameEngine {
 
   // Boss defeat tracking
   private bossDefeatTimer: number = 0;
+  private wasTouching: boolean = false;
 
   constructor() {
     this.input = new InputManager();
@@ -194,7 +195,7 @@ export class GameEngine {
   private updateWaveSpawning(deltaTime: number) {
     if (this.boss.isBossActive() || this.warningActive || this.bossDefeatTimer > 0) return;
 
-    const activeEnemyCount = this.enemies.getActive().length;
+    const activeEnemyCount = this.enemies.countActive();
     if (activeEnemyCount >= 30) return;
 
     const spawnCommands = this.waves.update(deltaTime, activeEnemyCount, CONFIG.WIDTH);
@@ -217,7 +218,16 @@ export class GameEngine {
   }
 
   private updatePlayer(deltaTime: number) {
-    const touchDelta = this.input.getTouchDelta();
+    // Initialize touch offset when touch begins
+    if (this.input.isTouching() && !this.wasTouching) {
+      this.input.setTouchOffset(
+        this.player.x + this.player.width / 2,
+        this.player.y + this.player.height / 2
+      );
+    }
+    this.wasTouching = this.input.isTouching();
+
+    const touchTarget = this.input.getTouchTarget();
 
     updatePlayer(
       this.player,
@@ -226,8 +236,7 @@ export class GameEngine {
         right: this.input.isKeyDown('ArrowRight') || this.input.isKeyDown('d'),
         up: this.input.isKeyDown('ArrowUp') || this.input.isKeyDown('w'),
         down: this.input.isKeyDown('ArrowDown') || this.input.isKeyDown('s'),
-        touchDx: touchDelta.dx,
-        touchDy: touchDelta.dy,
+        touchTarget,
       },
       deltaTime,
       CONFIG.WIDTH,
@@ -259,12 +268,13 @@ export class GameEngine {
     if (narrow) {
       const count = CONFIG.NARROW_BULLET_COUNT;
       const spread = CONFIG.NARROW_SPREAD;
+      const center = Math.floor(count / 2);
       for (let i = 0; i < count; i++) {
-        if (i === 0) continue;
+        if (i === center) continue;
         const b = this.bullets.acquire(true);
         b.x = this.player.x + this.player.width / 2 - 2;
         b.y = this.player.y + 5;
-        const angle = -Math.PI / 2 + (i - (count - 1) / 2) * spread;
+        const angle = -Math.PI / 2 + (i - center) * spread;
         b.vx = Math.cos(angle) * CONFIG.BULLET_SPEED * 0.3;
         b.vy = Math.sin(angle) * CONFIG.BULLET_SPEED;
       }
@@ -317,6 +327,7 @@ export class GameEngine {
     for (const b of bullets) {
       if (!b.isPlayer && b.active) {
         b.active = false;
+        this.bullets.release(b);
         this.particles.emit(b.x, b.y, 3, CONFIG.COLORS.BULLET_ENEMY, { speed: 2, size: 1 });
       }
     }
@@ -331,7 +342,8 @@ export class GameEngine {
     }
 
     if (this.boss.isBossActive()) {
-      this.boss.takeDamage(10);
+      const died = this.boss.takeDamage(10);
+      if (died) this.onBossDefeated();
     }
   }
 
@@ -355,7 +367,7 @@ export class GameEngine {
   }
 
   private updateBullets(deltaTime: number) {
-    this.bullets.update(deltaTime, CONFIG.HEIGHT);
+    this.bullets.update(deltaTime, CONFIG.WIDTH, CONFIG.HEIGHT);
   }
 
   private updateEnemies(deltaTime: number) {
@@ -460,7 +472,8 @@ export class GameEngine {
         { x: lx, y: ly, width: lw, height: lh },
         { x: boss.x, y: boss.y, width: boss.width, height: boss.height }
       )) {
-        this.boss.takeDamage(CONFIG.LASER_DAMAGE);
+        const died = this.boss.takeDamage(CONFIG.LASER_DAMAGE);
+        if (died) this.onBossDefeated();
       }
 
       if (boss) {
@@ -486,7 +499,8 @@ export class GameEngine {
     const enemies = this.enemies.getActive();
 
     // Player bullets vs enemies
-    for (const bullet of bullets) {
+    for (let bi = 0; bi < bullets.length; bi++) {
+      const bullet = bullets[bi];
       if (!bullet.isPlayer || !bullet.active) continue;
 
       for (const enemy of enemies) {
@@ -562,7 +576,8 @@ export class GameEngine {
     // Enemy bullets vs player
     if (!this.player.isInvincible && !this.bombActive) {
       let hit = false;
-      for (const bullet of bullets) {
+      for (let bi = 0; bi < bullets.length; bi++) {
+        const bullet = bullets[bi];
         if (bullet.isPlayer || !bullet.active) continue;
 
         if (checkCollision(

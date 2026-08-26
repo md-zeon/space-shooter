@@ -169,7 +169,7 @@ export class Renderer {
       const lBarY = this.canvasHeight - 22;
       ctx.fillStyle = '#1A1D2E';
       ctx.fillRect(lBarX, lBarY, lBarW, lBarH);
-      const chargePercent = laserActive ? 1 : Math.min(1, laserCharge / 3000);
+      const chargePercent = laserActive ? 1 : Math.min(1, laserCharge / CONFIG.LASER_CHARGE_TIME);
       ctx.fillStyle = laserActive ? CONFIG.COLORS.LASER_BEAM : CONFIG.COLORS.POWERUP_NARROW;
       ctx.shadowColor = ctx.fillStyle;
       ctx.shadowBlur = laserActive ? 8 : 3;
@@ -187,7 +187,7 @@ export class Renderer {
       const nBarH = 3;
       const nBarX = 10;
       const nBarY = this.canvasHeight - 30;
-      const nPercent = narrowTimer / 8000;
+      const nPercent = narrowTimer / CONFIG.POWERUP_NARROW_DURATION;
       ctx.fillStyle = '#1A1D2E';
       ctx.fillRect(nBarX, nBarY, nBarW, nBarH);
       ctx.fillStyle = CONFIG.COLORS.POWERUP_NARROW;
@@ -218,7 +218,7 @@ export class Renderer {
     const barWidth = this.canvasWidth * 0.7;
     const barHeight = 6;
     const barX = (this.canvasWidth - barWidth) / 2;
-    const barY = 28;
+    const barY = 42;
 
     // Boss name
     ctx.font = '8px "Press Start 2P"';

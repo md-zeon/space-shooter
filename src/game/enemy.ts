@@ -228,7 +228,7 @@ export class EnemyManager {
       if (enemy.formationId >= 0) {
         const origin = this.formationOrigins.get(enemy.formationId);
         if (origin) {
-          enemy.x = origin.x + enemy.offsetX;
+          enemy.x = Math.max(0, Math.min(CONFIG.WIDTH - enemy.width, origin.x + enemy.offsetX));
           enemy.y = origin.y + enemy.offsetY;
         }
       } else {
@@ -320,12 +320,14 @@ export class EnemyManager {
     }
 
     for (const [id, origin] of this.formationOrigins) {
+      const members = this.enemies.filter(e => e.formationId === id);
       if (origin.retreating && origin.y < -200) {
         this.formationOrigins.delete(id);
-        const members = this.enemies.filter(e => e.formationId === id);
         for (const m of members) {
           this.remove(m);
         }
+      } else if (members.length === 0) {
+        this.formationOrigins.delete(id);
       }
     }
 
@@ -538,11 +540,17 @@ export class EnemyManager {
   }
 
   getActive(): Enemy[] {
-    return this.enemies.filter(e => e.active);
+    return this.enemies;
+  }
+
+  countActive(): number {
+    let c = 0;
+    for (const e of this.enemies) if (e.active) c++;
+    return c;
   }
 
   getActiveCount(): number {
-    return this.enemies.filter(e => e.active).length;
+    return this.countActive();
   }
 
   setDifficulty(level: number) {

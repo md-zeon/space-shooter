@@ -6,11 +6,6 @@ export interface ClickEvent {
 export class InputManager {
   private keys: Set<string> = new Set();
   private keysJustPressed: Set<string> = new Set();
-  private touchStartX: number = 0;
-  private touchStartY: number = 0;
-  private touchCurrentX: number = 0;
-  private touchCurrentY: number = 0;
-  private isTouching: boolean = false;
   private isShooting: boolean = false;
   private wasShooting: boolean = false;
   private canvas: HTMLCanvasElement | null = null;
@@ -21,6 +16,14 @@ export class InputManager {
   private mouseY: number = 0;
   private hasMouse: boolean = false;
   private backButtonConsumed: boolean = false;
+
+  // Touch position tracking (direct follow with offset)
+  private touchX: number = 0;
+  private touchY: number = 0;
+  private touchOffsetX: number = 0;
+  private touchOffsetY: number = 0;
+  private _isTouching: boolean = false;
+  private touchInitialized: boolean = false;
 
   init(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -76,55 +79,78 @@ export class InputManager {
     this.backButtonConsumed = false;
   };
 
+  private toCanvasCoords(clientX: number, clientY: number): { x: number; y: number } {
+    const rect = this.canvas?.getBoundingClientRect();
+    if (!rect) return { x: 0, y: 0 };
+    const scaleX = this.canvas!.width / rect.width;
+    const scaleY = this.canvas!.height / rect.height;
+    return {
+      x: (clientX - rect.left) * scaleX,
+      y: (clientY - rect.top) * scaleY,
+    };
+  }
+
   private handleTouchStart = (e: TouchEvent) => {
     e.preventDefault();
     const touch = e.touches[0];
-    const rect = this.canvas?.getBoundingClientRect();
-    if (!rect) return;
+    const pos = this.toCanvasCoords(touch.clientX, touch.clientY);
 
-    const scaleX = this.canvas!.width / rect.width;
-    const scaleY = this.canvas!.height / rect.height;
-    const x = (touch.clientX - rect.left) * scaleX;
-    const y = (touch.clientY - rect.top) * scaleY;
+    this.touchX = pos.x;
+    this.touchY = pos.y;
 
-    this.touchStartX = x;
-    this.touchStartY = y;
-    this.touchCurrentX = x;
-    this.touchCurrentY = y;
-    this.isTouching = true;
+    if (!this.touchInitialized) {
+      this.touchOffsetX = 0;
+      this.touchOffsetY = 0;
+      this.touchInitialized = true;
+    }
+
+    this._isTouching = true;
 
     // Register as click for menu interaction
-    this.pendingClick = { x, y };
+    this.pendingClick = { x: pos.x, y: pos.y };
 
-    // Right 60% = shoot zone (during gameplay) — also consume the click so it doesn't trigger pause
-    const relX = touch.clientX - rect.left;
-    const relWidth = rect.width;
-    if (relX / relWidth > 0.4) {
-      this.wasShooting = false;
-      this.isShooting = true;
-      this.pendingClick = null;
-    }
+    // Shooting is always active during touch in auto mode; in manual mode too
+    this.wasShooting = false;
+    this.isShooting = true;
+    this.pendingClick = null;
   };
 
   private handleTouchMove = (e: TouchEvent) => {
     e.preventDefault();
-    if (!this.isTouching) return;
+    if (!this._isTouching) return;
 
     const touch = e.touches[0];
-    const rect = this.canvas?.getBoundingClientRect();
-    if (!rect) return;
-
-    const scaleX = this.canvas!.width / rect.width;
-    const scaleY = this.canvas!.height / rect.height;
-    this.touchCurrentX = (touch.clientX - rect.left) * scaleX;
-    this.touchCurrentY = (touch.clientY - rect.top) * scaleY;
+    const pos = this.toCanvasCoords(touch.clientX, touch.clientY);
+    this.touchX = pos.x;
+    this.touchY = pos.y;
   };
 
   private handleTouchEnd = (e: TouchEvent) => {
     e.preventDefault();
-    this.isTouching = false;
+    this._isTouching = false;
     this.isShooting = false;
+    this.touchInitialized = false;
   };
+
+  // Called by engine to set the offset at the moment touch starts
+  // offset = shipCenter - fingerPosition
+  setTouchOffset(shipCenterX: number, shipCenterY: number) {
+    this.touchOffsetX = shipCenterX - this.touchX;
+    this.touchOffsetY = shipCenterY - this.touchY;
+  }
+
+  isTouching(): boolean {
+    return this._isTouching;
+  }
+
+  // Returns the target position the ship should move toward (in canvas coords)
+  getTouchTarget(): { x: number; y: number } | null {
+    if (!this._isTouching) return null;
+    return {
+      x: this.touchX + this.touchOffsetX,
+      y: this.touchY + this.touchOffsetY,
+    };
+  }
 
   private handleMouseDown = (e: MouseEvent) => {
     const rect = this.canvas?.getBoundingClientRect();
@@ -200,19 +226,5 @@ export class InputManager {
       return true;
     }
     return false;
-  }
-
-  getTouchDelta(): { dx: number; dy: number } {
-    if (!this.isTouching || !this.canvas) return { dx: 0, dy: 0 };
-
-    const maxDelta = 30;
-
-    const dx = (this.touchCurrentX - this.touchStartX) / maxDelta;
-    const dy = (this.touchCurrentY - this.touchStartY) / maxDelta;
-
-    return {
-      dx: Math.max(-1, Math.min(1, dx)),
-      dy: Math.max(-1, Math.min(1, dy)),
-    };
   }
 }

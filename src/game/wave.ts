@@ -83,10 +83,15 @@ function generateFormation(
     case 'diamond': {
       const cx = canvasWidth / 2;
       if (count <= 4) {
-        positions.push({ x: cx - CONFIG.ENEMY_WIDTH / 2, y: -CONFIG.ENEMY_HEIGHT });
-        positions.push({ x: cx - 40, y: -CONFIG.ENEMY_HEIGHT - 30 });
-        positions.push({ x: cx + 10, y: -CONFIG.ENEMY_HEIGHT - 30 });
-        positions.push({ x: cx - CONFIG.ENEMY_WIDTH / 2, y: -CONFIG.ENEMY_HEIGHT - 60 });
+        const diamondPos = [
+          { x: cx - CONFIG.ENEMY_WIDTH / 2, y: -CONFIG.ENEMY_HEIGHT },
+          { x: cx - 40, y: -CONFIG.ENEMY_HEIGHT - 30 },
+          { x: cx + 10, y: -CONFIG.ENEMY_HEIGHT - 30 },
+          { x: cx - CONFIG.ENEMY_WIDTH / 2, y: -CONFIG.ENEMY_HEIGHT - 60 },
+        ];
+        for (let i = 0; i < count; i++) {
+          positions.push(diamondPos[i]);
+        }
       } else {
         const spacing = 35;
         const half = Math.floor(count / 2);
@@ -337,7 +342,7 @@ export class WaveManager {
     while (this.pendingSpawns.length > 0 && this.spawnDelay <= 0) {
       const cmd = this.pendingSpawns.shift()!;
       newSpawns.push(cmd);
-      this.spawnDelay += cmd.delay > 0 ? 50 : 0;
+      this.spawnDelay += 80;
     }
 
     if (this.pendingSpawns.length === 0 && newSpawns.length === 0 && !this.betweenWaves) {
