@@ -5,6 +5,12 @@ export class AudioManager {
   private musicGain: GainNode | null = null;
   private muted: boolean = false;
 
+  // Menu music
+  private menuMusicNodes: OscillatorNode[] = [];
+  private menuMusicGains: GainNode[] = [];
+  private menuMusicInterval: ReturnType<typeof setInterval> | null = null;
+  private menuMusicPlaying: boolean = false;
+
   init() {
     try {
       this.ctx = new AudioContext();
@@ -163,5 +169,93 @@ export class AudioManager {
 
   isMuted(): boolean {
     return this.muted;
+  }
+
+  startMenuMusic() {
+    if (!this.ctx || !this.musicGain || this.menuMusicPlaying) return;
+    this.menuMusicPlaying = true;
+
+    // Drone pad — two detuned sine waves for thickness
+    const droneFreqs = [55, 55.5, 110];
+    for (const freq of droneFreqs) {
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+      gain.gain.setValueAtTime(0, this.ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.08, this.ctx.currentTime + 2);
+      osc.connect(gain);
+      gain.connect(this.musicGain);
+      osc.start();
+      this.menuMusicNodes.push(osc);
+      this.menuMusicGains.push(gain);
+    }
+
+    // Slow LFO on the drone for subtle movement
+    if (this.ctx) {
+      const lfo = this.ctx.createOscillator();
+      const lfoGain = this.ctx.createGain();
+      lfo.type = 'sine';
+      lfo.frequency.setValueAtTime(0.15, this.ctx.currentTime);
+      lfoGain.gain.setValueAtTime(3, this.ctx.currentTime);
+      lfo.connect(lfoGain);
+      if (this.menuMusicNodes[0]) {
+        lfoGain.connect(this.menuMusicNodes[0].frequency);
+      }
+      lfo.start();
+      this.menuMusicNodes.push(lfo);
+    }
+
+    // Slow arpeggio — minor pentatonic notes cycling
+    const arpNotes = [220, 261.6, 329.6, 392, 523.3, 392, 329.6, 261.6];
+    let arpIndex = 0;
+
+    const playArpNote = () => {
+      if (!this.ctx || !this.musicGain || !this.menuMusicPlaying) return;
+
+      const osc = this.ctx.createOscillator();
+      const gain = this.ctx.createGain();
+      const freq = arpNotes[arpIndex % arpNotes.length];
+
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+
+      gain.gain.setValueAtTime(0, this.ctx.currentTime);
+      gain.gain.linearRampToValueAtTime(0.06, this.ctx.currentTime + 0.1);
+      gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 1.8);
+
+      osc.connect(gain);
+      gain.connect(this.musicGain);
+      osc.start(this.ctx.currentTime);
+      osc.stop(this.ctx.currentTime + 2);
+
+      arpIndex++;
+    };
+
+    playArpNote();
+    this.menuMusicInterval = setInterval(playArpNote, 800);
+  }
+
+  stopMenuMusic() {
+    if (!this.menuMusicPlaying) return;
+    this.menuMusicPlaying = false;
+
+    if (this.menuMusicInterval) {
+      clearInterval(this.menuMusicInterval);
+      this.menuMusicInterval = null;
+    }
+
+    const now = this.ctx?.currentTime ?? 0;
+    for (const gain of this.menuMusicGains) {
+      gain.gain.linearRampToValueAtTime(0, now + 1);
+    }
+
+    setTimeout(() => {
+      for (const osc of this.menuMusicNodes) {
+        try { osc.stop(); } catch {}
+      }
+      this.menuMusicNodes = [];
+      this.menuMusicGains = [];
+    }, 1200);
   }
 }

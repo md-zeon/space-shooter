@@ -81,6 +81,7 @@ export class GameEngine {
 
     this.loadHighScore();
     this.loadShootMode();
+    this.audio.startMenuMusic();
 
     this.lastTime = performance.now();
     this.loop(this.lastTime);
@@ -144,6 +145,7 @@ export class GameEngine {
     switch (this.state) {
       case 'menu':
         if (click) {
+          this.audio.resume();
           const item = this.renderer.hitTestMenu(click.x, click.y);
           if (item?.id === 'PLAY') this.startGame();
         }
@@ -173,7 +175,7 @@ export class GameEngine {
           const item = this.renderer.hitTestMenu(click.x, click.y);
           if (item?.id === 'RESUME') this.state = 'playing';
           else if (item?.id === 'RESTART') this.startGame();
-          else if (item?.id === 'EXIT') this.state = 'menu';
+          else if (item?.id === 'EXIT') { this.state = 'menu'; this.audio.startMenuMusic(); }
         }
         if (this.input.isKeyJustPressed('Escape')) this.state = 'playing';
         if (this.input.isKeyJustPressed(' ') || this.input.isKeyJustPressed('Enter')) this.state = 'playing';
@@ -183,7 +185,7 @@ export class GameEngine {
         if (click) {
           const item = this.renderer.hitTestMenu(click.x, click.y);
           if (item?.id === 'RESTART') this.startGame();
-          else if (item?.id === 'EXIT') this.state = 'menu';
+          else if (item?.id === 'EXIT') { this.state = 'menu'; this.audio.startMenuMusic(); }
         }
         if (this.input.isKeyJustPressed(' ') || this.input.isKeyJustPressed('Enter')) this.startGame();
         break;
@@ -764,6 +766,7 @@ export class GameEngine {
 
   private startGame() {
     this.state = 'playing';
+    this.audio.stopMenuMusic();
     this.score = 0;
     this.chain = 0;
     this.chainTimer = 0;
