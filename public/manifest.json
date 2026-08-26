@@ -1,0 +1,23 @@
+{
+  "name": "Space Shooter",
+  "short_name": "SpaceShooter",
+  "description": "A classic arcade space shooter game",
+  "start_url": "/",
+  "display": "fullscreen",
+  "orientation": "portrait",
+  "theme_color": "#050A1A",
+  "background_color": "#050A1A",
+  "icons": [
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}
