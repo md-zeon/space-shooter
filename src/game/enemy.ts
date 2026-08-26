@@ -19,6 +19,9 @@ export interface Enemy {
   originX: number;
   flashTimer: number;
   spawnX: number;
+  formationId: number;
+  offsetX: number;
+  offsetY: number;
 }
 
 export interface EnemyBulletRequest {
@@ -29,11 +32,24 @@ export interface EnemyBulletRequest {
   type?: string;
 }
 
+interface FormationOrigin {
+  x: number;
+  y: number;
+  speed: number;
+  movementPattern: string;
+  patternTimer: number;
+  canvasWidth: number;
+  retreatTimer: number;
+  retreating: boolean;
+  retreatSpeed: number;
+}
+
 export class EnemyManager {
   private enemies: Enemy[] = [];
   private difficulty: number = 1;
   private playerX: number = CONFIG.WIDTH / 2;
   private playerY: number = CONFIG.HEIGHT - 60;
+  private formationOrigins: Map<number, FormationOrigin> = new Map();
 
   setPlayerPosition(x: number, y: number) {
     this.playerX = x;
@@ -46,7 +62,10 @@ export class EnemyManager {
     y: number,
     speed: number,
     movementPattern: string,
-    shootPattern: string
+    shootPattern: string,
+    formationId: number = -1,
+    offsetX: number = 0,
+    offsetY: number = 0
   ) {
     const health = type === 'elite' ? 4 : type === 'advanced' ? 2 : 1;
     this.enemies.push({
@@ -65,12 +84,135 @@ export class EnemyManager {
       originX: x,
       flashTimer: 0,
       spawnX: x,
+      formationId,
+      offsetX,
+      offsetY,
     });
+
+    if (formationId >= 0 && !this.formationOrigins.has(formationId)) {
+      this.formationOrigins.set(formationId, {
+        x,
+        y,
+        speed,
+        movementPattern,
+        patternTimer: 0,
+        canvasWidth: CONFIG.WIDTH,
+        retreatTimer: 0,
+        retreating: false,
+        retreatSpeed: 0,
+      });
+    }
+  }
+
+  private updateFormationOrigin(origin: FormationOrigin, deltaTime: number) {
+    const dt60 = deltaTime * 60;
+    origin.patternTimer += deltaTime * 1000;
+    const speed = origin.speed * dt60;
+
+    if (origin.retreating) {
+      origin.y -= origin.retreatSpeed * dt60;
+      origin.retreatSpeed += 0.15 * dt60;
+      return;
+    }
+
+    switch (origin.movementPattern) {
+      case 'straight':
+        origin.y += speed;
+        break;
+
+      case 'sinewave':
+        origin.y += speed * 0.8;
+        origin.x += Math.sin(origin.patternTimer * 0.003) * 1.5;
+        break;
+
+      case 'zigzag': {
+        const zigPeriod = 2000;
+        const phase = (origin.patternTimer % zigPeriod) / zigPeriod;
+        if (phase < 0.5) {
+          origin.x += speed * 1.2;
+        } else {
+          origin.x -= speed * 1.2;
+        }
+        origin.y += speed * 0.5;
+        break;
+      }
+
+      case 'hover': {
+        const hoverY = 80 + Math.sin(origin.patternTimer * 0.001) * 20;
+        if (origin.y < hoverY) {
+          origin.y += speed * 0.6;
+        } else {
+          origin.x += Math.sin(origin.patternTimer * 0.002) * 2;
+          origin.retreatTimer += deltaTime * 1000;
+          if (origin.retreatTimer > 8000) {
+            origin.retreating = true;
+            origin.retreatSpeed = 1;
+          }
+        }
+        origin.y += Math.sin(origin.patternTimer * 0.001) * 0.5;
+        break;
+      }
+
+      case 'reposition': {
+        const targetY = 100;
+        if (origin.y < targetY) {
+          origin.y += speed;
+        } else {
+          origin.x += Math.sin(origin.patternTimer * 0.001) * 1.5;
+          origin.retreatTimer += deltaTime * 1000;
+          if (origin.retreatTimer > 10000) {
+            origin.retreating = true;
+            origin.retreatSpeed = 1;
+          }
+        }
+        break;
+      }
+
+      case 'dash': {
+        if (origin.patternTimer < 500) {
+          origin.y += speed * 0.3;
+        } else if (origin.patternTimer < 800) {
+          origin.y += speed * 4;
+        } else if (origin.patternTimer > 2000) {
+          origin.patternTimer = 0;
+        }
+        break;
+      }
+
+      case 'swoop': {
+        const swoopT = origin.patternTimer * 0.002;
+        origin.x += Math.cos(swoopT) * speed * 0.8;
+        origin.y += speed * 0.7;
+        break;
+      }
+
+      case 'teleport': {
+        if (origin.patternTimer > 3000) {
+          origin.x = 30 + Math.random() * (origin.canvasWidth - 60);
+          origin.patternTimer = 0;
+        }
+        origin.y += speed * 0.4;
+        break;
+      }
+
+      default:
+        origin.y += speed;
+    }
+
+    if (origin.movementPattern === 'hover' || origin.movementPattern === 'reposition' || origin.movementPattern === 'zigzag') {
+      if (origin.x < 10) origin.x = 10;
+      if (origin.x > origin.canvasWidth - 90) origin.x = origin.canvasWidth - 90;
+    }
   }
 
   update(deltaTime: number, canvasWidth: number, canvasHeight: number): EnemyBulletRequest[] {
     const bulletRequests: EnemyBulletRequest[] = [];
     const dt60 = deltaTime * 60;
+
+    for (const origin of this.formationOrigins.values()) {
+      origin.canvasWidth = canvasWidth;
+      this.updateFormationOrigin(origin, deltaTime);
+    }
 
     for (let i = this.enemies.length - 1; i >= 0; i--) {
       const enemy = this.enemies[i];
@@ -83,92 +225,107 @@ export class EnemyManager {
       enemy.shootTimer += deltaTime * 1000;
       if (enemy.flashTimer > 0) enemy.flashTimer -= deltaTime * 1000;
 
-      const speed = enemy.speed * dt60;
-
-      switch (enemy.movementPattern) {
-        case 'straight':
-          enemy.y += speed;
-          break;
-
-        case 'sinewave':
-          enemy.y += speed * 0.8;
-          enemy.x = enemy.originX + Math.sin(enemy.patternTimer * 0.003) * 40;
-          break;
-
-        case 'zigzag': {
-          const zigPeriod = 2000;
-          const phase = (enemy.patternTimer % zigPeriod) / zigPeriod;
-          if (phase < 0.5) {
-            enemy.x += speed * 1.2;
-          } else {
-            enemy.x -= speed * 1.2;
-          }
-          enemy.y += speed * 0.5;
-          break;
+      if (enemy.formationId >= 0) {
+        const origin = this.formationOrigins.get(enemy.formationId);
+        if (origin) {
+          enemy.x = origin.x + enemy.offsetX;
+          enemy.y = origin.y + enemy.offsetY;
         }
+      } else {
+        const speed = enemy.speed * dt60;
 
-        case 'hover': {
-          const hoverY = 80 + Math.sin(enemy.patternTimer * 0.001) * 20;
-          if (enemy.y < hoverY) {
-            enemy.y += speed * 0.6;
-          } else {
-            enemy.x += Math.sin(enemy.patternTimer * 0.002) * 2;
-          }
-          enemy.y += Math.sin(enemy.patternTimer * 0.001) * 0.5;
-          break;
-        }
-
-        case 'dash': {
-          if (enemy.patternTimer < 500) {
-            enemy.y += speed * 0.3;
-          } else if (enemy.patternTimer < 800) {
-            enemy.y += speed * 4;
-          } else if (enemy.patternTimer > 2000) {
-            enemy.patternTimer = 0;
-          }
-          break;
-        }
-
-        case 'swoop': {
-          const swoopT = enemy.patternTimer * 0.002;
-          enemy.x = enemy.spawnX + Math.sin(swoopT) * 80;
-          enemy.y += speed * 0.7;
-          break;
-        }
-
-        case 'teleport': {
-          if (enemy.patternTimer > 3000) {
-            enemy.x = 30 + Math.random() * (canvasWidth - 60);
-            enemy.patternTimer = 0;
-            enemy.flashTimer = 300;
-          }
-          enemy.y += speed * 0.4;
-          break;
-        }
-
-        case 'reposition': {
-          if (enemy.y < 100) {
+        switch (enemy.movementPattern) {
+          case 'straight':
             enemy.y += speed;
-          } else {
-            enemy.x += Math.sin(enemy.patternTimer * 0.001) * 1.5;
+            break;
+
+          case 'sinewave':
+            enemy.y += speed * 0.8;
+            enemy.x = enemy.originX + Math.sin(enemy.patternTimer * 0.003) * 40;
+            break;
+
+          case 'zigzag': {
+            const zigPeriod = 2000;
+            const phase = (enemy.patternTimer % zigPeriod) / zigPeriod;
+            if (phase < 0.5) {
+              enemy.x += speed * 1.2;
+            } else {
+              enemy.x -= speed * 1.2;
+            }
+            enemy.y += speed * 0.5;
+            break;
           }
-          break;
+
+          case 'hover': {
+            const hoverY = 80 + Math.sin(enemy.patternTimer * 0.001) * 20;
+            if (enemy.y < hoverY) {
+              enemy.y += speed * 0.6;
+            } else {
+              enemy.x += Math.sin(enemy.patternTimer * 0.002) * 2;
+            }
+            enemy.y += Math.sin(enemy.patternTimer * 0.001) * 0.5;
+            break;
+          }
+
+          case 'dash': {
+            if (enemy.patternTimer < 500) {
+              enemy.y += speed * 0.3;
+            } else if (enemy.patternTimer < 800) {
+              enemy.y += speed * 4;
+            } else if (enemy.patternTimer > 2000) {
+              enemy.patternTimer = 0;
+            }
+            break;
+          }
+
+          case 'swoop': {
+            const swoopT = enemy.patternTimer * 0.002;
+            enemy.x = enemy.spawnX + Math.sin(swoopT) * 80;
+            enemy.y += speed * 0.7;
+            break;
+          }
+
+          case 'teleport': {
+            if (enemy.patternTimer > 3000) {
+              enemy.x = 30 + Math.random() * (canvasWidth - 60);
+              enemy.patternTimer = 0;
+              enemy.flashTimer = 300;
+            }
+            enemy.y += speed * 0.4;
+            break;
+          }
+
+          case 'reposition': {
+            if (enemy.y < 100) {
+              enemy.y += speed;
+            } else {
+              enemy.x += Math.sin(enemy.patternTimer * 0.001) * 1.5;
+            }
+            break;
+          }
+
+          default:
+            enemy.y += speed;
         }
 
-        default:
-          enemy.y += speed;
+        enemy.x = Math.max(0, Math.min(canvasWidth - enemy.width, enemy.x));
       }
 
-      // Keep in bounds horizontally
-      enemy.x = Math.max(0, Math.min(canvasWidth - enemy.width, enemy.x));
-
-      // Shooting
       const requests = this.checkShoot(enemy, canvasWidth, canvasHeight);
       if (requests) bulletRequests.push(...requests);
 
-      // Remove if off screen
       if (enemy.y > canvasHeight + enemy.height) {
         this.remove(enemy);
+      }
+    }
+
+    for (const [id, origin] of this.formationOrigins) {
+      if (origin.retreating && origin.y < -200) {
+        this.formationOrigins.delete(id);
+        const members = this.enemies.filter(e => e.formationId === id);
+        for (const m of members) {
+          this.remove(m);
+        }
       }
     }
 
@@ -278,7 +435,6 @@ export class EnemyManager {
       const centerX = enemy.x + enemy.width / 2;
       const centerY = enemy.y + enemy.height / 2;
 
-      // Flash on hit
       if (enemy.flashTimer > 0) {
         ctx.shadowColor = '#FFFFFF';
         ctx.shadowBlur = 20;
@@ -314,7 +470,6 @@ export class EnemyManager {
         ctx.closePath();
         ctx.fill();
 
-        // Eye
         ctx.fillStyle = '#FFFFFF';
         ctx.beginPath();
         ctx.arc(centerX, centerY - 2, 3, 0, Math.PI * 2);
@@ -333,7 +488,6 @@ export class EnemyManager {
         ctx.arc(centerX, centerY, 3, 0, Math.PI * 2);
         ctx.fill();
 
-        // Wing accents
         ctx.strokeStyle = '#FFAA00';
         ctx.lineWidth = 1;
         ctx.beginPath();
@@ -343,21 +497,19 @@ export class EnemyManager {
         ctx.lineTo(enemy.x + enemy.width - 3, centerY);
         ctx.stroke();
       } else {
-        // Hexagon for elite
         const hw = enemy.width / 2;
         const hh = enemy.height / 2;
         ctx.beginPath();
-        for (let i = 0; i < 6; i++) {
-          const angle = (i / 6) * Math.PI * 2 - Math.PI / 2;
+        for (let j = 0; j < 6; j++) {
+          const angle = (j / 6) * Math.PI * 2 - Math.PI / 2;
           const px = centerX + Math.cos(angle) * hw * 0.9;
           const py = centerY + Math.sin(angle) * hh * 0.9;
-          if (i === 0) ctx.moveTo(px, py);
+          if (j === 0) ctx.moveTo(px, py);
           else ctx.lineTo(px, py);
         }
         ctx.closePath();
         ctx.fill();
 
-        // Inner detail
         ctx.fillStyle = '#FF00AA';
         ctx.beginPath();
         ctx.arc(centerX, centerY, 5, 0, Math.PI * 2);
@@ -369,7 +521,6 @@ export class EnemyManager {
         ctx.fill();
       }
 
-      // Health bar for enemies with more than 1 HP
       if (enemy.maxHealth > 1) {
         const barWidth = enemy.width * 0.8;
         const barHeight = 3;
@@ -400,5 +551,6 @@ export class EnemyManager {
 
   clear() {
     this.enemies = [];
+    this.formationOrigins.clear();
   }
 }

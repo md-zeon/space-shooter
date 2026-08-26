@@ -193,6 +193,8 @@ export class GameEngine {
     if (this.boss.isBossActive() || this.warningActive || this.bossDefeatTimer > 0) return;
 
     const activeEnemyCount = this.enemies.getActive().length;
+    if (activeEnemyCount >= 30) return;
+
     const spawnCommands = this.waves.update(deltaTime, activeEnemyCount, CONFIG.WIDTH);
 
     this.enemies.setDifficulty(this.waves.getDifficulty());
@@ -200,7 +202,8 @@ export class GameEngine {
     for (const cmd of spawnCommands) {
       this.enemies.spawnEnemy(
         cmd.type, cmd.x, cmd.y, cmd.speed,
-        cmd.movementPattern, cmd.shootPattern
+        cmd.movementPattern, cmd.shootPattern,
+        cmd.formationId, cmd.offsetX, cmd.offsetY
       );
     }
 

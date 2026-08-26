@@ -1,7 +1,7 @@
 import { CONFIG } from './config';
 import { EnemyType } from './enemy';
 
-export type FormationType = 'random' | 'line' | 'vshape' | 'diamond' | 'pincer' | 'grid' | 'circle' | 'spiral';
+export type FormationType = 'random' | 'line' | 'vshape' | 'diamond' | 'pincer' | 'grid' | 'circle' | 'spiral' | 'cross';
 
 export interface WaveGroup {
   type: EnemyType;
@@ -26,7 +26,15 @@ export interface SpawnCommand {
   movementPattern: string;
   shootPattern: string;
   delay: number;
+  formationId: number;
+  offsetX: number;
+  offsetY: number;
 }
+
+const FORMATION_POOL: FormationType[] = [
+  'random', 'line', 'vshape', 'diamond', 'pincer',
+  'grid', 'circle', 'spiral', 'cross',
+];
 
 function generateFormation(
   formation: FormationType,
@@ -65,8 +73,8 @@ function generateFormation(
         const half = Math.floor(count / 2);
         const offset = i - half;
         positions.push({
-          x: centerX + offset * 35 - CONFIG.ENEMY_WIDTH / 2,
-          y: -CONFIG.ENEMY_HEIGHT - Math.abs(offset) * 25,
+          x: centerX + offset * 40 - CONFIG.ENEMY_WIDTH / 2,
+          y: -CONFIG.ENEMY_HEIGHT - Math.abs(offset) * 30,
         });
       }
       break;
@@ -76,17 +84,24 @@ function generateFormation(
       const cx = canvasWidth / 2;
       if (count <= 4) {
         positions.push({ x: cx - CONFIG.ENEMY_WIDTH / 2, y: -CONFIG.ENEMY_HEIGHT });
-        positions.push({ x: cx - 55, y: -CONFIG.ENEMY_HEIGHT - 30 });
-        positions.push({ x: cx + 25, y: -CONFIG.ENEMY_HEIGHT - 30 });
+        positions.push({ x: cx - 40, y: -CONFIG.ENEMY_HEIGHT - 30 });
+        positions.push({ x: cx + 10, y: -CONFIG.ENEMY_HEIGHT - 30 });
         positions.push({ x: cx - CONFIG.ENEMY_WIDTH / 2, y: -CONFIG.ENEMY_HEIGHT - 60 });
       } else {
-        for (let i = 0; i < count; i++) {
-          const angle = (i / count) * Math.PI * 2 - Math.PI / 2;
-          const radius = 35;
-          positions.push({
-            x: cx + Math.cos(angle) * radius - CONFIG.ENEMY_WIDTH / 2,
-            y: -CONFIG.ENEMY_HEIGHT - 30 + Math.sin(angle) * radius,
-          });
+        const spacing = 35;
+        const half = Math.floor(count / 2);
+        let placed = 0;
+        for (let i = 0; i < half && placed < count; i++) {
+          const xOff = i * spacing * 0.7;
+          positions.push({ x: cx - xOff - CONFIG.ENEMY_WIDTH / 2, y: -CONFIG.ENEMY_HEIGHT - i * spacing });
+          placed++;
+          if (placed < count) {
+            positions.push({ x: cx + xOff - CONFIG.ENEMY_WIDTH / 2, y: -CONFIG.ENEMY_HEIGHT - i * spacing });
+            placed++;
+          }
+        }
+        if (placed < count) {
+          positions.push({ x: cx - CONFIG.ENEMY_WIDTH / 2, y: -CONFIG.ENEMY_HEIGHT - half * spacing });
         }
       }
       break;
@@ -94,7 +109,7 @@ function generateFormation(
 
     case 'pincer': {
       const half = Math.ceil(count / 2);
-      const spacing = 30;
+      const spacing = 45;
       for (let i = 0; i < half; i++) {
         positions.push({
           x: margin,
@@ -114,7 +129,7 @@ function generateFormation(
       const cols = Math.min(count, 5);
       const rows = Math.ceil(count / cols);
       const spacingX = usableWidth / (cols + 1);
-      const spacingY = 40;
+      const spacingY = 45;
       let placed = 0;
       for (let r = 0; r < rows && placed < count; r++) {
         for (let c = 0; c < cols && placed < count; c++) {
@@ -144,12 +159,34 @@ function generateFormation(
     case 'spiral': {
       const centerX = canvasWidth / 2;
       for (let i = 0; i < count; i++) {
-        const t = i / count;
+        const t = i / Math.max(count - 1, 1);
         const angle = t * Math.PI * 4;
         const radius = 30 + t * 50;
         positions.push({
           x: centerX + Math.cos(angle) * radius - CONFIG.ENEMY_WIDTH / 2,
           y: -CONFIG.ENEMY_HEIGHT - 20 - t * 80,
+        });
+      }
+      break;
+    }
+
+    case 'cross': {
+      const centerX = canvasWidth / 2;
+      const armLen = Math.ceil(count / 2);
+      const spacing = 40;
+      for (let i = 0; i < armLen; i++) {
+        positions.push({
+          x: centerX - CONFIG.ENEMY_WIDTH / 2,
+          y: -CONFIG.ENEMY_HEIGHT - i * spacing,
+        });
+      }
+      const remaining = count - armLen;
+      for (let i = 0; i < remaining; i++) {
+        const side = i < Math.ceil(remaining / 2) ? -1 : 1;
+        const pos = i % Math.ceil(remaining / 2);
+        positions.push({
+          x: centerX + side * (pos + 1) * spacing - CONFIG.ENEMY_WIDTH / 2,
+          y: -CONFIG.ENEMY_HEIGHT - armLen * spacing,
         });
       }
       break;
@@ -165,10 +202,11 @@ function getMovementPattern(formation: FormationType, type: EnemyType): string {
     case 'line': return 'straight';
     case 'vshape': return 'straight';
     case 'diamond': return 'sinewave';
-    case 'pincer': return 'zigzag';
+    case 'pincer': return 'reposition';
     case 'grid': return 'straight';
-    case 'circle': return 'sinewave';
-    case 'spiral': return 'sinewave';
+    case 'circle': return 'hover';
+    case 'spiral': return 'swoop';
+    case 'cross': return 'zigzag';
     default: return type === 'advanced' ? 'sinewave' : 'straight';
   }
 }
@@ -185,14 +223,13 @@ function getShootPattern(type: EnemyType, difficulty: number): string {
   }
 }
 
+let nextFormationId = 0;
+
 export class WaveManager {
   private waves: Wave[] = [];
   private currentWaveIndex: number = 0;
   private pendingSpawns: SpawnCommand[] = [];
   private spawnDelay: number = 0;
-  private waveClearTimer: number = 0;
-  private waveClearThreshold: number = 2000;
-  private waitingForClear: boolean = false;
   private betweenWaves: boolean = false;
   private betweenWaveTimer: number = 0;
   private difficulty: number = 1;
@@ -225,15 +262,14 @@ export class WaveManager {
       const groups: WaveGroup[] = [];
       const numGroups = 1 + Math.floor(Math.random() * (tier + 1));
 
-      const formations: FormationType[] = ['random', 'line', 'vshape', 'diamond', 'pincer', 'grid'];
-
       for (let g = 0; g < numGroups; g++) {
         let type: EnemyType = 'basic';
         const roll = Math.random();
         if (tier >= 2 && roll > 0.85) type = 'elite';
         else if (tier >= 1 && roll > 0.5) type = 'advanced';
 
-        const formation = formations[Math.floor(Math.random() * Math.min(formations.length, 2 + tier))];
+        const maxFormationIndex = Math.min(FORMATION_POOL.length, 2 + tier * 2);
+        const formation = FORMATION_POOL[Math.floor(Math.random() * maxFormationIndex)];
         const count = 3 + Math.floor(Math.random() * (3 + tier * 2));
 
         groups.push({
@@ -255,6 +291,10 @@ export class WaveManager {
       const positions = generateFormation(group.formation, group.count, canvasWidth);
       const movement = getMovementPattern(group.formation, group.type);
 
+      const formationId = group.formation !== 'random' ? nextFormationId++ : -1;
+      const cx = positions.reduce((s, p) => s + p.x, 0) / positions.length;
+      const cy = positions.reduce((s, p) => s + p.y, 0) / positions.length;
+
       for (let i = 0; i < positions.length; i++) {
         commands.push({
           type: group.type,
@@ -264,6 +304,9 @@ export class WaveManager {
           movementPattern: movement,
           shootPattern: getShootPattern(group.type, this.difficulty),
           delay: (group.delay || 0) + i * 80,
+          formationId,
+          offsetX: positions[i].x - cx,
+          offsetY: positions[i].y - cy,
         });
       }
     }
@@ -290,27 +333,6 @@ export class WaveManager {
       return [];
     }
 
-    if (this.waitingForClear) {
-      if (activeEnemyCount === 0) {
-        this.waveClearTimer += deltaTime * 1000;
-        if (this.waveClearTimer >= this.waveClearThreshold) {
-          this.waitingForClear = false;
-          this.betweenWaves = true;
-          this.betweenWaveTimer = 1500;
-        }
-      } else {
-        this.waveClearTimer = 0;
-      }
-
-      this.spawnDelay -= deltaTime * 1000;
-      while (this.pendingSpawns.length > 0 && this.spawnDelay <= 0) {
-        const cmd = this.pendingSpawns.shift()!;
-        newSpawns.push(cmd);
-        this.spawnDelay += cmd.delay > 0 ? 50 : 0;
-      }
-      return newSpawns;
-    }
-
     this.spawnDelay -= deltaTime * 1000;
     while (this.pendingSpawns.length > 0 && this.spawnDelay <= 0) {
       const cmd = this.pendingSpawns.shift()!;
@@ -318,14 +340,9 @@ export class WaveManager {
       this.spawnDelay += cmd.delay > 0 ? 50 : 0;
     }
 
-    if (this.pendingSpawns.length === 0 && activeEnemyCount > 0 && activeEnemyCount <= 2 && !this.waitingForClear) {
-      this.waitingForClear = true;
-      this.waveClearTimer = 0;
-    }
-
-    if (this.pendingSpawns.length === 0 && newSpawns.length === 0 && activeEnemyCount === 0 && !this.waitingForClear) {
+    if (this.pendingSpawns.length === 0 && newSpawns.length === 0 && !this.betweenWaves) {
       this.betweenWaves = true;
-      this.betweenWaveTimer = 1000;
+      this.betweenWaveTimer = 3000;
     }
 
     return newSpawns;
@@ -349,14 +366,6 @@ export class WaveManager {
     const commands = this.getSpawnCommands(wave, canvasWidth);
     this.pendingSpawns = commands;
     this.spawnDelay = 0;
-    this.waitingForClear = false;
-    this.waveClearTimer = 0;
-
-    if (wave.isBossPrep) {
-      this.waveClearThreshold = 1000;
-    } else {
-      this.waveClearThreshold = 2000;
-    }
   }
 
   getWaveAnnouncement(): { wave: number; isBoss: boolean } | null {
@@ -378,14 +387,13 @@ export class WaveManager {
     this.currentWaveIndex = 0;
     this.pendingSpawns = [];
     this.spawnDelay = 0;
-    this.waveClearTimer = 0;
-    this.waitingForClear = false;
     this.betweenWaves = false;
     this.betweenWaveTimer = 0;
     this.difficulty = 1;
     this.waveNumber = 0;
     this.bossActive = false;
     this.announcedWave = -1;
+    nextFormationId = 0;
     this.generateWaves();
   }
 
