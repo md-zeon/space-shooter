@@ -4,6 +4,7 @@ import { Player, createPlayer, updatePlayer, renderPlayer } from './player';
 import { BulletPool } from './bullet';
 import { EnemyManager } from './enemy';
 import { ParticleSystem } from './particles';
+import { PowerUpManager } from './powerup';
 import { AudioManager } from './audio';
 import { Renderer } from './renderer';
 import { checkCollision } from './collision';
@@ -19,6 +20,7 @@ export class GameEngine {
   private bullets: BulletPool;
   private enemies: EnemyManager;
   private particles: ParticleSystem;
+  private powerUps: PowerUpManager;
   private audio: AudioManager;
   private renderer: Renderer;
 
@@ -37,6 +39,7 @@ export class GameEngine {
     this.bullets = new BulletPool();
     this.enemies = new EnemyManager();
     this.particles = new ParticleSystem();
+    this.powerUps = new PowerUpManager();
     this.audio = new AudioManager();
     this.renderer = new Renderer();
   }
@@ -87,6 +90,7 @@ export class GameEngine {
     this.updatePlayer(deltaTime);
     this.updateBullets(deltaTime);
     this.updateEnemies(deltaTime);
+    this.updatePowerUps(deltaTime);
     this.updateParticles(deltaTime);
     this.checkCollisions();
     this.checkLevelUp();
@@ -170,6 +174,10 @@ export class GameEngine {
 
   private updateEnemies(deltaTime: number) {
     this.enemies.update(deltaTime, CONFIG.WIDTH, CONFIG.HEIGHT);
+  }
+
+  private updatePowerUps(deltaTime: number) {
+    this.powerUps.update(deltaTime, CONFIG.HEIGHT);
   }
 
   private updateParticles(deltaTime: number) {
@@ -256,6 +264,27 @@ export class GameEngine {
         }
       }
     }
+
+    // Power-ups vs player
+    const powerUps = this.powerUps.getActive();
+    for (const powerUp of powerUps) {
+      if (!powerUp.active) continue;
+
+      if (
+        checkCollision(
+          { x: powerUp.x, y: powerUp.y, width: powerUp.size, height: powerUp.size },
+          {
+            x: this.player.x,
+            y: this.player.y,
+            width: this.player.width,
+            height: this.player.height,
+          }
+        )
+      ) {
+        this.onPowerUpCollected(powerUp);
+        this.powerUps.remove(powerUp);
+      }
+    }
   }
 
   private onEnemyKilled(enemy: { x: number; y: number; width: number; height: number; active: boolean }) {
@@ -296,6 +325,35 @@ export class GameEngine {
     }
   }
 
+  private onPowerUpCollected(powerUp: { type: string }) {
+    this.audio.playPowerUp();
+
+    switch (powerUp.type) {
+      case 'shield':
+        this.player.isInvincible = true;
+        this.player.invincibleTimer = CONFIG.POWERUP_DURATION;
+        break;
+      case 'weapon':
+        this.player.powerLevel = Math.min(3, this.player.powerLevel + 1);
+        break;
+      case 'health':
+        this.player.lives = Math.min(CONFIG.PLAYER_LIVES, this.player.lives + 1);
+        break;
+      case 'score':
+        this.score += CONFIG.SCORE_MULTIPLIER_DURATION;
+        break;
+    }
+
+    // Power-up particles
+    this.particles.emit(
+      this.player.x + this.player.width / 2,
+      this.player.y + this.player.height / 2,
+      20,
+      CONFIG.COLORS.POWERUP_SCORE,
+      { speed: 5, size: 3 }
+    );
+  }
+
   private checkLevelUp() {
     const newLevel = Math.floor(this.score / 1000) + 1;
     if (newLevel > this.level) {
@@ -318,6 +376,7 @@ export class GameEngine {
     }
 
     this.enemies.render(this.ctx);
+    this.powerUps.render(this.ctx);
     this.bullets.render(this.ctx);
     renderPlayer(this.ctx, this.player, performance.now());
     this.particles.render(this.ctx);
@@ -340,6 +399,7 @@ export class GameEngine {
     this.player = createPlayer(CONFIG.WIDTH, CONFIG.HEIGHT);
     this.bullets.clear();
     this.enemies.clear();
+    this.powerUps.clear();
     this.particles.clear();
     this.audio.resume();
   }
