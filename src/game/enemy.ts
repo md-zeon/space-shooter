@@ -74,7 +74,10 @@ export class EnemyManager {
 
     for (let i = this.enemies.length - 1; i >= 0; i--) {
       const enemy = this.enemies[i];
-      if (!enemy.active) continue;
+      if (!enemy.active) {
+        this.remove(enemy);
+        continue;
+      }
 
       enemy.patternTimer += deltaTime * 1000;
       enemy.shootTimer += deltaTime * 1000;
@@ -384,7 +387,11 @@ export class EnemyManager {
   }
 
   getActive(): Enemy[] {
-    return this.enemies;
+    return this.enemies.filter(e => e.active);
+  }
+
+  getActiveCount(): number {
+    return this.enemies.filter(e => e.active).length;
   }
 
   setDifficulty(level: number) {
