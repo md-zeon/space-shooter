@@ -1,0 +1,60 @@
+export const CONFIG = {
+  // Canvas
+  WIDTH: 400,
+  HEIGHT: 700,
+
+  // Player
+  PLAYER_SPEED: 6,
+  PLAYER_WIDTH: 40,
+  PLAYER_HEIGHT: 40,
+  PLAYER_LIVES: 3,
+  INVINCIBLE_DURATION: 2000,
+  FIRE_RATE: 150,
+
+  // Bullets
+  BULLET_SPEED: 10,
+  BULLET_WIDTH: 4,
+  BULLET_HEIGHT: 12,
+  ENEMY_BULLET_SPEED: 5,
+
+  // Enemies
+  ENEMY_SPAWN_RATE: 1000,
+  ENEMY_SPEED: 2,
+  ENEMY_WIDTH: 30,
+  ENEMY_HEIGHT: 30,
+
+  // Power-ups
+  POWERUP_SPEED: 2,
+  POWERUP_SIZE: 20,
+  POWERUP_DURATION: 10000,
+
+  // Particles
+  MAX_PARTICLES: 200,
+  PARTICLE_SPEED: 3,
+  PARTICLE_LIFE: 30,
+
+  // Scoring
+  SCORE_PER_ENEMY: 100,
+  SCORE_MULTIPLIER_DURATION: 10000,
+
+  // Colors
+  COLORS: {
+    PLAYER: '#00FFFF',
+    PLAYER_GLOW: 'rgba(0, 255, 255, 0.3)',
+    ENEMY: '#FF0044',
+    ENEMY_GLOW: 'rgba(255, 0, 68, 0.3)',
+    BOSS: '#B300FF',
+    BULLET_PLAYER: '#00CCFF',
+    BULLET_ENEMY: '#FF4500',
+    POWERUP_SHIELD: '#00E5FF',
+    POWERUP_WEAPON: '#39FF14',
+    POWERUP_HEALTH: '#05FFA1',
+    POWERUP_SCORE: '#FFD600',
+    BACKGROUND: '#050A1A',
+    STAR: '#FFFFFF',
+    TEXT: '#F0F8FF',
+  },
+
+  // Timing
+  FIXED_DT: 1 / 60,
+} as const;

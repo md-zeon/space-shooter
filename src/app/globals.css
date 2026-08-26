@@ -1,5 +1,5 @@
-@import "tailwindcss";
 @import url('https://fonts.googleapis.com/css2?family=Electrolize&family=Exo+2:wght@300;400;700&family=Orbitron:wght@700;900&family=Press+Start+2P&family=VT323&display=swap');
+@import "tailwindcss";
 
 @theme {
   --color-player-core: #FFFFFF;

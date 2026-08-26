@@ -1,0 +1,119 @@
+export class AudioManager {
+  private ctx: AudioContext | null = null;
+  private masterGain: GainNode | null = null;
+  private sfxGain: GainNode | null = null;
+  private musicGain: GainNode | null = null;
+  private muted: boolean = false;
+
+  init() {
+    try {
+      this.ctx = new AudioContext();
+      this.masterGain = this.ctx.createGain();
+      this.sfxGain = this.ctx.createGain();
+      this.musicGain = this.ctx.createGain();
+
+      this.sfxGain.connect(this.masterGain);
+      this.musicGain.connect(this.masterGain);
+      this.masterGain.connect(this.ctx.destination);
+
+      this.sfxGain.gain.value = 0.3;
+      this.musicGain.gain.value = 0.15;
+    } catch (e) {
+      console.warn('Web Audio API not supported');
+    }
+  }
+
+  resume() {
+    if (this.ctx?.state === 'suspended') {
+      this.ctx.resume();
+    }
+  }
+
+  private playTone(
+    frequency: number,
+    duration: number,
+    type: OscillatorType = 'square',
+    gain: number = 0.3
+  ) {
+    if (!this.ctx || !this.sfxGain || this.muted) return;
+
+    const osc = this.ctx.createOscillator();
+    const gainNode = this.ctx.createGain();
+
+    osc.type = type;
+    osc.frequency.setValueAtTime(frequency, this.ctx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(frequency * 0.5, this.ctx.currentTime + duration);
+
+    gainNode.gain.setValueAtTime(gain, this.ctx.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+
+    osc.connect(gainNode);
+    gainNode.connect(this.sfxGain);
+
+    osc.start();
+    osc.stop(this.ctx.currentTime + duration);
+  }
+
+  private playNoise(duration: number, gain: number = 0.2) {
+    if (!this.ctx || !this.sfxGain || this.muted) return;
+
+    const bufferSize = this.ctx.sampleRate * duration;
+    const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+
+    for (let i = 0; i < bufferSize; i++) {
+      data[i] = Math.random() * 2 - 1;
+    }
+
+    const source = this.ctx.createBufferSource();
+    source.buffer = buffer;
+
+    const gainNode = this.ctx.createGain();
+    gainNode.gain.setValueAtTime(gain, this.ctx.currentTime);
+    gainNode.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+
+    source.connect(gainNode);
+    gainNode.connect(this.sfxGain);
+
+    source.start();
+  }
+
+  playShoot() {
+    this.playTone(880, 0.1, 'square', 0.2);
+    this.playTone(1320, 0.05, 'square', 0.1);
+  }
+
+  playExplosion() {
+    this.playNoise(0.3, 0.3);
+    this.playTone(100, 0.3, 'sawtooth', 0.2);
+  }
+
+  playPowerUp() {
+    this.playTone(523, 0.1, 'sine', 0.3);
+    setTimeout(() => this.playTone(659, 0.1, 'sine', 0.3), 50);
+    setTimeout(() => this.playTone(784, 0.15, 'sine', 0.3), 100);
+  }
+
+  playDamage() {
+    this.playTone(200, 0.2, 'sawtooth', 0.3);
+    this.playNoise(0.1, 0.2);
+  }
+
+  playGameOver() {
+    this.playTone(440, 0.2, 'square', 0.3);
+    setTimeout(() => this.playTone(349, 0.2, 'square', 0.3), 200);
+    setTimeout(() => this.playTone(294, 0.3, 'square', 0.3), 400);
+  }
+
+  toggleMute() {
+    this.muted = !this.muted;
+    if (this.masterGain) {
+      this.masterGain.gain.value = this.muted ? 0 : 1;
+    }
+    return this.muted;
+  }
+
+  isMuted(): boolean {
+    return this.muted;
+  }
+}
