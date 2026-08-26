@@ -202,10 +202,7 @@ export class Renderer {
 
     // Fill
     const hpPercent = Math.max(0, boss.health / boss.maxHealth);
-    let fillColor: string;
-    if (boss.phase === 3) fillColor = CONFIG.COLORS.HP_BAR_BOSS_PHASE3;
-    else if (boss.phase === 2) fillColor = CONFIG.COLORS.HP_BAR_BOSS_PHASE2;
-    else fillColor = CONFIG.COLORS.HP_BAR_BOSS;
+    const fillColor = boss.color || CONFIG.COLORS.HP_BAR_BOSS;
 
     ctx.fillStyle = fillColor;
     ctx.shadowColor = fillColor;

@@ -40,6 +40,7 @@ export const CONFIG = {
   // Boss
   BOSS_WIDTH: 80,
   BOSS_HEIGHT: 80,
+  MAX_BOSS_MINIONS: 6,
 
   // Particles
   MAX_PARTICLES: 300,
@@ -90,6 +91,11 @@ export const CONFIG = {
     HP_BAR_BOSS: '#FF0044',
     HP_BAR_BOSS_PHASE2: '#FF6600',
     HP_BAR_BOSS_PHASE3: '#FF00FF',
+    BOSS_CIPHER: '#00CCCC',
+    BOSS_NEXUS: '#00FF66',
+    BOSS_VOID: '#6600CC',
+    BOSS_OMEGA: '#CC0000',
+    BOSS_ABYSS: '#FFD700',
   },
 
   FIXED_DT: 1 / 60,
