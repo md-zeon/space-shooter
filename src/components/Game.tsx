@@ -31,27 +31,21 @@ export default function Game() {
   };
 
   return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-[#050A1A]">
+    <div className="flex items-center justify-center min-h-screen bg-[#050A1A] relative">
       <canvas
         ref={canvasRef}
-        className="block max-w-full max-h-[85vh]"
+        className="block max-w-full max-h-screen"
         style={{ touchAction: 'none' }}
       />
-      <div className="mt-4 flex gap-4 items-center">
-        <button
-          onClick={handleToggleShootMode}
-          className="px-4 py-2 text-sm font-mono text-[#00FFFF] border border-[#00FFFF] 
-                     hover:bg-[#00FFFF]/20 transition-colors rounded"
-          style={{
-            boxShadow: '0 0 10px rgba(0, 255, 255, 0.3)',
-          }}
-        >
-          FIRE: {shootMode === 'auto' ? 'AUTO' : 'MANUAL'}
-        </button>
-        <span className="text-[#6A7080] text-xs font-mono">
-          {shootMode === 'auto' ? 'Hold to shoot' : 'Tap to shoot'}
-        </span>
-      </div>
+      <button
+        onClick={handleToggleShootMode}
+        className="absolute bottom-4 right-4 w-8 h-8 flex items-center justify-center 
+                   text-[10px] font-mono text-[#6A7080] border border-[#2A2D3A] 
+                   hover:border-[#00FFFF] hover:text-[#00FFFF] transition-colors rounded"
+        title={shootMode === 'auto' ? 'Auto fire' : 'Manual fire'}
+      >
+        {shootMode === 'auto' ? 'A' : 'M'}
+      </button>
     </div>
   );
 }

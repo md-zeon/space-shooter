@@ -105,7 +105,7 @@ export class Renderer {
     ctx.font = '6px "Press Start 2P"';
     ctx.fillStyle = CONFIG.COLORS.TEXT_MUTED;
     ctx.textAlign = 'left';
-    ctx.fillText(`FIRE: ${shootMode.toUpperCase()}`, 10, this.canvasHeight - 10);
+    ctx.fillText(`${shootMode === 'auto' ? 'AUTO' : 'MANUAL'}`, 10, this.canvasHeight - 10);
 
     ctx.restore();
   }

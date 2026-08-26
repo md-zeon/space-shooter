@@ -113,12 +113,9 @@ export class InputManager {
 
   isShootingActive(): boolean {
     if (this.shootMode === 'auto') {
-      return this.keys.has(' ') || this.isShooting;
+      return true;
     } else {
-      // Manual mode: only fire on initial press
-      const spaceJustPressed = this.isKeyJustPressed(' ');
-      const touchJustPressed = this.isShooting && !this.wasShooting;
-      return spaceJustPressed || touchJustPressed;
+      return this.keys.has(' ') || this.isShooting;
     }
   }
 
