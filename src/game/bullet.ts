@@ -1,5 +1,7 @@
 import { CONFIG } from './config';
 
+export type BulletType = 'player' | 'straight' | 'aimed' | 'spread' | 'radial' | 'spiral' | 'burst' | 'fan' | 'ring' | 'laser';
+
 export interface Bullet {
   x: number;
   y: number;
@@ -10,7 +12,20 @@ export interface Bullet {
   vy: number;
   isPlayer: boolean;
   active: boolean;
+  bulletType: BulletType;
 }
+
+const ENEMY_BULLET_SIZES: Record<string, { w: number; h: number }> = {
+  default: { w: 4, h: 4 },
+  aimed: { w: 3, h: 6 },
+  spread: { w: 4, h: 4 },
+  radial: { w: 4, h: 4 },
+  spiral: { w: 5, h: 5 },
+  burst: { w: 3, h: 5 },
+  fan: { w: 4, h: 4 },
+  ring: { w: 3, h: 3 },
+  laser: { w: 2, h: 10 },
+};
 
 export class BulletPool {
   private pool: Bullet[] = [];
@@ -37,6 +52,7 @@ export class BulletPool {
       vy: 0,
       isPlayer: true,
       active: false,
+      bulletType: 'player',
     };
   }
 
@@ -47,8 +63,11 @@ export class BulletPool {
     }
 
     bullet.isPlayer = isPlayer;
+    bullet.bulletType = 'player';
     bullet.speed = isPlayer ? CONFIG.BULLET_SPEED : CONFIG.ENEMY_BULLET_SPEED;
     bullet.active = true;
+    bullet.width = CONFIG.BULLET_WIDTH;
+    bullet.height = CONFIG.BULLET_HEIGHT;
 
     if (isPlayer) {
       bullet.vx = 0;
@@ -59,20 +78,26 @@ export class BulletPool {
     return bullet;
   }
 
-  acquireAngled(x: number, y: number, angle: number, speed?: number, _type?: string): Bullet {
+  acquireAngled(x: number, y: number, angle: number, speed?: number, type?: string): Bullet {
     let bullet = this.pool.pop();
     if (!bullet) {
       bullet = this.create();
     }
 
     const bSpeed = speed ?? CONFIG.ENEMY_BULLET_SPEED;
+    const bType = (type as BulletType) || 'straight';
+    const size = ENEMY_BULLET_SIZES[type || 'default'] || ENEMY_BULLET_SIZES.default;
+
     bullet.isPlayer = false;
+    bullet.bulletType = bType;
     bullet.speed = bSpeed;
     bullet.active = true;
     bullet.x = x;
     bullet.y = y;
     bullet.vx = Math.cos(angle) * bSpeed;
     bullet.vy = Math.sin(angle) * bSpeed;
+    bullet.width = size.w;
+    bullet.height = size.h;
 
     this.active.push(bullet);
     return bullet;

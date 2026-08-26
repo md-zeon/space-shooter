@@ -111,6 +111,7 @@ export class GameEngine {
 
     if (this.state === 'playing') {
       if (!this.particles.isHitstopped()) {
+        this.updateWaveSpawning(deltaTime);
         this.updatePlayer(deltaTime);
         this.updateBullets(deltaTime);
         this.updateEnemies(deltaTime);
@@ -122,6 +123,9 @@ export class GameEngine {
         this.checkWaveAnnouncements();
         this.checkWarning();
         this.checkBossDefeat(deltaTime);
+        if (this.waveAnnounceTimer > 0) {
+          this.waveAnnounceTimer -= CONFIG.FIXED_DT * 1000;
+        }
       }
       this.updateParticles(deltaTime);
     } else {
@@ -185,6 +189,30 @@ export class GameEngine {
     }
 
     if (this.input.isKeyDown('m')) this.audio.toggleMute();
+  }
+
+  private updateWaveSpawning(deltaTime: number) {
+    if (this.boss.isBossActive() || this.warningActive) return;
+
+    const activeEnemyCount = this.enemies.getActive().length;
+    const spawnCommands = this.waves.update(deltaTime, activeEnemyCount, CONFIG.WIDTH);
+
+    // Sync difficulty
+    this.enemies.setDifficulty(this.waves.getDifficulty());
+
+    for (const cmd of spawnCommands) {
+      this.enemies.spawnEnemy(
+        cmd.type, cmd.x, cmd.y, cmd.speed,
+        cmd.movementPattern, cmd.shootPattern
+      );
+    }
+
+    // Check if wave manager wants to start a boss
+    if (this.waves.isBossWaveNow() && !this.boss.isBossActive() && !this.warningActive) {
+      this.warningActive = true;
+      this.warningTimer = 2500;
+      this.audio.playWarning();
+    }
   }
 
   private updatePlayer(deltaTime: number) {
@@ -553,11 +581,7 @@ export class GameEngine {
     const announcement = this.waves.getWaveAnnouncement();
     if (announcement) {
       this.waveAnnounceTimer = 2000;
-      if (announcement.isBoss) {
-        this.warningActive = true;
-        this.warningTimer = 2500;
-        this.audio.playWarning();
-      } else {
+      if (!announcement.isBoss) {
         this.audio.playWaveComplete();
       }
     }
@@ -699,9 +723,22 @@ export class GameEngine {
     for (const bullet of bullets) {
       if (!bullet.active) continue;
       ctx.save();
-      const color = bullet.isPlayer ? CONFIG.COLORS.BULLET_PLAYER : CONFIG.COLORS.BULLET_ENEMY;
+
+      let color: string;
+      if (bullet.isPlayer) {
+        color = CONFIG.COLORS.BULLET_PLAYER;
+        ctx.shadowBlur = 8;
+      } else {
+        switch (bullet.bulletType) {
+          case 'aimed': color = CONFIG.COLORS.BULLET_ENEMY_AIMED; break;
+          case 'spiral': color = CONFIG.COLORS.BULLET_ENEMY_SPIRAL; break;
+          case 'laser': color = CONFIG.COLORS.BULLET_ENEMY_LASER; break;
+          default: color = CONFIG.COLORS.BULLET_ENEMY; break;
+        }
+        ctx.shadowBlur = 6;
+      }
+
       ctx.shadowColor = color;
-      ctx.shadowBlur = bullet.isPlayer ? 8 : 6;
       ctx.fillStyle = color;
       ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
       ctx.restore();
@@ -752,7 +789,6 @@ export class GameEngine {
 
     // Wave announcement
     if (this.waveAnnounceTimer > 0) {
-      this.waveAnnounceTimer -= CONFIG.FIXED_DT * 1000;
       this.renderer.renderWaveAnnouncement(
         ctx,
         this.waves.getWaveNumber(),
