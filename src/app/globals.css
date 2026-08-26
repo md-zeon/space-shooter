@@ -1,0 +1,93 @@
+@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Electrolize&family=Exo+2:wght@300;400;700&family=Orbitron:wght@700;900&family=Press+Start+2P&family=VT323&display=swap');
+
+@theme {
+  --color-player-core: #FFFFFF;
+  --color-player-glow: #00FFFF;
+  --color-player-trail: #00CCFF;
+  --color-primary-action: #FF006E;
+  --color-primary-accent: #00F0FF;
+
+  --color-enemy-primary: #FF0044;
+  --color-enemy-secondary: #FF2A6D;
+  --color-enemy-glow: #FF6600;
+  --color-boss-primary: #B300FF;
+
+  --color-powerup-shield: #00E5FF;
+  --color-powerup-weapon: #39FF14;
+  --color-powerup-health: #05FFA1;
+  --color-powerup-score: #FFD600;
+
+  --color-void-deep: #050A1A;
+  --color-void-mid: #0A1428;
+  --color-void-surface: #0D0E14;
+
+  --color-text-primary: #F0F8FF;
+  --color-text-secondary: #B0B8C8;
+  --color-text-muted: #6A7080;
+  --color-text-neon: #00FFFF;
+  --color-hud-border: #0088FF;
+  --color-card-bg: #1F2230;
+  --color-border-default: #2A2D3A;
+
+  --color-health-full: #00FF00;
+  --color-health-mid: #FFD600;
+  --color-health-critical: #FF0044;
+
+  --font-title: 'Orbitron', sans-serif;
+  --font-score: 'Press Start 2P', cursive;
+  --font-hud: 'Electrolize', sans-serif;
+  --font-body: 'Exo 2', sans-serif;
+  --font-mono: 'VT323', monospace;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  background-color: #050A1A;
+}
+
+canvas {
+  display: block;
+}
+
+.neon-text-cyan {
+  text-shadow: 0 0 4px #FFFFFF, 0 0 8px #00FFFF, 0 0 20px #00FFFF, 0 0 40px #00FFFF;
+}
+
+.neon-text-pink {
+  text-shadow: 0 0 4px #FFFFFF, 0 0 8px #FF006E, 0 0 20px #FF006E, 0 0 40px #FF006E;
+}
+
+.neon-text-green {
+  text-shadow: 0 0 4px #FFFFFF, 0 0 8px #39FF14, 0 0 20px #39FF14, 0 0 40px #39FF14;
+}
+
+.neon-btn-cyan {
+  border: 2px solid #00F0FF;
+  box-shadow: inset 0 0 6px rgba(0, 240, 255, 0.65), 0 0 6px rgba(0, 240, 255, 0.75), 0 0 20px rgba(0, 240, 255, 0.4), 0 0 40px rgba(0, 240, 255, 0.2);
+}
+
+.neon-btn-pink {
+  border: 2px solid #FF006E;
+  box-shadow: inset 0 0 6px rgba(255, 0, 110, 0.65), 0 0 6px rgba(255, 0, 110, 0.75), 0 0 20px rgba(255, 0, 110, 0.4), 0 0 40px rgba(255, 0, 110, 0.2);
+}
+
+.crt-overlay {
+  background: repeating-linear-gradient(to bottom, transparent 0px, transparent 2px, rgba(0, 0, 0, 0.08) 2px, rgba(0, 0, 0, 0.08) 4px);
+  pointer-events: none;
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+@keyframes scanline {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100vh); }
+}

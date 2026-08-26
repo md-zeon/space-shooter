@@ -13,16 +13,16 @@ A classic arcade space shooter game built with Canvas API, Next.js 16, and TypeS
 
 ## Tech Stack
 
-| Layer | Technology |
-|-------|------------|
-| Framework | Next.js 16 (App Router) |
-| Styling | Tailwind CSS v4 |
-| Game Engine | HTML5 Canvas API |
-| Animation | GSAP |
-| PWA | Serwist |
-| Storage | IndexedDB (idb) |
-| Audio | Web Audio API |
-| Language | TypeScript |
+| Layer       | Technology              |
+| ----------- | ----------------------- |
+| Framework   | Next.js 16 (App Router) |
+| Styling     | Tailwind CSS v4         |
+| Game Engine | HTML5 Canvas API        |
+| Animation   | GSAP                    |
+| PWA         | Serwist                 |
+| Storage     | IndexedDB (idb)         |
+| Audio       | Web Audio API           |
+| Language    | TypeScript              |
 
 ## Getting Started
 
@@ -66,22 +66,22 @@ The service worker is disabled in development mode. To test PWA features:
 
 ### Desktop
 
-| Action | Key |
-|--------|-----|
-| Move Left | ← / A |
-| Move Right | → / D |
-| Shoot | Space |
-| Pause | Escape |
-| Mute | M |
+| Action     | Key    |
+| ---------- | ------ |
+| Move Left  | ← / A  |
+| Move Right | → / D  |
+| Shoot      | Space  |
+| Pause      | Escape |
+| Mute       | M      |
 
 ### Mobile
 
-| Action | Gesture |
-|--------|---------|
-| Move | Touch & drag (left side) |
-| Shoot | Tap/hold (right side) |
-| Pause | Two-finger tap |
-| Mute | Swipe down |
+| Action | Gesture                  |
+| ------ | ------------------------ |
+| Move   | Touch & drag (left side) |
+| Shoot  | Tap/hold (right side)    |
+| Pause  | Two-finger tap           |
+| Mute   | Swipe down               |
 
 ## Project Structure
 
@@ -142,4 +142,3 @@ src/
 ## License
 
 MIT
-# space-shooter
