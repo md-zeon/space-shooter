@@ -1,12 +1,17 @@
 {
-  "name": "Space Shooter",
+  "name": "Space Shooter - Neon Retro Arcade",
   "short_name": "SpaceShooter",
-  "description": "A classic arcade space shooter game",
+  "description": "A classic arcade space shooter game with neon retro aesthetics. Fight waves of enemies, defeat epic bosses, and collect power-ups.",
   "start_url": "/",
+  "scope": "/",
   "display": "fullscreen",
   "orientation": "portrait",
   "theme_color": "#050A1A",
   "background_color": "#050A1A",
+  "categories": ["games", "entertainment"],
+  "lang": "en",
+  "dir": "ltr",
+  "prefer_related_applications": false,
   "icons": [
     {
       "src": "/icons/icon-192.png",
@@ -18,6 +23,27 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Play Game",
+      "short_name": "Play",
+      "description": "Start a new game",
+      "url": "/",
+      "icons": [
+        {
+          "src": "/icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
     }
   ]
 }
