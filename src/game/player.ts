@@ -34,7 +34,8 @@ export function updatePlayer(
   player: Player,
   input: { left: boolean; right: boolean; up: boolean; down: boolean; touchDx: number; touchDy: number },
   deltaTime: number,
-  canvasWidth: number
+  canvasWidth: number,
+  canvasHeight: number
 ) {
   const speed = player.speed * deltaTime * 60;
 
@@ -52,7 +53,7 @@ export function updatePlayer(
 
   // Bounds checking
   player.x = Math.max(0, Math.min(canvasWidth - player.width, player.x));
-  player.y = Math.max(0, player.y);
+  player.y = Math.max(0, Math.min(canvasHeight - player.height, player.y));
 
   // Invincibility timer
   if (player.isInvincible) {

@@ -139,7 +139,8 @@ export class GameEngine {
         touchDy: touchDelta.dy,
       },
       deltaTime,
-      CONFIG.WIDTH
+      CONFIG.WIDTH,
+      CONFIG.HEIGHT
     );
 
     // Auto fire
