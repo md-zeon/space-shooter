@@ -9,7 +9,7 @@ import { AudioManager } from './audio';
 import { Renderer } from './renderer';
 import { checkCollision } from './collision';
 
-export type GameState = 'start' | 'playing' | 'paused' | 'gameover';
+export type GameState = 'menu' | 'playing' | 'paused' | 'gameover';
 
 export class GameEngine {
   private canvas: HTMLCanvasElement | null = null;
@@ -24,7 +24,7 @@ export class GameEngine {
   private audio: AudioManager;
   private renderer: Renderer;
 
-  private state: GameState = 'start';
+  private state: GameState = 'menu';
   private score: number = 0;
   private level: number = 1;
   private highScore: number = 0;
@@ -33,6 +33,7 @@ export class GameEngine {
   private lastTime: number = 0;
   private accumulator: number = 0;
   private animationId: number = 0;
+  private pauseBtnBounds = { x: 0, y: 0, width: 0, height: 0 };
 
   constructor() {
     this.input = new InputManager();
@@ -86,42 +87,87 @@ export class GameEngine {
   private fixedUpdate(deltaTime: number) {
     this.handleInput();
 
-    if (this.state !== 'playing') return;
-
-    this.updatePlayer(deltaTime);
-    this.updateBullets(deltaTime);
-    this.updateEnemies(deltaTime);
-    this.updatePowerUps(deltaTime);
-    this.updateParticles(deltaTime);
-    this.checkCollisions();
-    this.checkLevelUp();
+    if (this.state === 'playing') {
+      this.updatePlayer(deltaTime);
+      this.updateBullets(deltaTime);
+      this.updateEnemies(deltaTime);
+      this.updatePowerUps(deltaTime);
+      this.updateParticles(deltaTime);
+      this.checkCollisions();
+      this.checkLevelUp();
+    } else {
+      this.updateParticles(deltaTime);
+    }
 
     this.input.clearJustPressed();
     this.input.updateShootingState();
   }
 
   private handleInput() {
-    // Start game
-    if (this.state === 'start' && this.input.isKeyDown(' ')) {
-      this.startGame();
+    const click = this.input.consumeClick();
+
+    switch (this.state) {
+      case 'menu':
+        if (click) {
+          const item = this.renderer.hitTestMenu(click.x, click.y);
+          if (item?.id === 'PLAY') {
+            this.startGame();
+          }
+        }
+        if (this.input.isKeyJustPressed(' ') || this.input.isKeyJustPressed('Enter')) {
+          this.startGame();
+        }
+        break;
+
+      case 'playing':
+        if (click) {
+          const { x, y, width, height } = this.pauseBtnBounds;
+          if (this.renderer.hitTestPauseButton(click.x, click.y, x, y, width, height)) {
+            this.state = 'paused';
+            break;
+          }
+        }
+        if (this.input.isKeyJustPressed('Escape') || this.input.consumeBackButton()) {
+          this.state = 'paused';
+        }
+        break;
+
+      case 'paused':
+        if (click) {
+          const item = this.renderer.hitTestMenu(click.x, click.y);
+          if (item?.id === 'RESUME') {
+            this.state = 'playing';
+          } else if (item?.id === 'RESTART') {
+            this.startGame();
+          } else if (item?.id === 'EXIT') {
+            this.state = 'menu';
+          }
+        }
+        if (this.input.isKeyJustPressed('Escape')) {
+          this.state = 'playing';
+        }
+        if (this.input.isKeyJustPressed(' ') || this.input.isKeyJustPressed('Enter')) {
+          this.state = 'playing';
+        }
+        break;
+
+      case 'gameover':
+        if (click) {
+          const item = this.renderer.hitTestMenu(click.x, click.y);
+          if (item?.id === 'RESTART') {
+            this.startGame();
+          } else if (item?.id === 'EXIT') {
+            this.state = 'menu';
+          }
+        }
+        if (this.input.isKeyJustPressed(' ') || this.input.isKeyJustPressed('Enter')) {
+          this.startGame();
+        }
+        break;
     }
 
-    // Restart game
-    if (this.state === 'gameover' && this.input.isKeyDown(' ')) {
-      this.startGame();
-    }
-
-    // Pause
-    if (this.state === 'playing' && this.input.isKeyDown('Escape')) {
-      this.state = 'paused';
-    } else if (this.state === 'paused' && this.input.isKeyDown('Escape')) {
-      this.state = 'playing';
-    }
-
-    // Mute
     if (this.input.isKeyDown('m')) {
       this.audio.toggleMute();
-      this.input.isKeyDown('m'); // consume
     }
   }
 
@@ -143,7 +189,6 @@ export class GameEngine {
       CONFIG.HEIGHT
     );
 
-    // Auto fire
     if (this.input.isShootingActive()) {
       this.shoot();
     }
@@ -161,7 +206,6 @@ export class GameEngine {
     bullet.x = this.player.x + this.player.width / 2 - bullet.width / 2;
     bullet.y = this.player.y;
 
-    // Power level affects bullet pattern
     if (this.player.powerLevel >= 2) {
       const leftBullet = this.bullets.acquire(true);
       leftBullet.x = this.player.x - 5;
@@ -197,7 +241,6 @@ export class GameEngine {
     const bullets = this.bullets.getActive();
     const enemies = this.enemies.getActive();
 
-    // Player bullets vs enemies
     for (const bullet of bullets) {
       if (!bullet.isPlayer || !bullet.active) continue;
 
@@ -217,7 +260,6 @@ export class GameEngine {
             this.onEnemyKilled(enemy);
           }
 
-          // Hit particles
           this.particles.emit(
             bullet.x + bullet.width / 2,
             bullet.y,
@@ -229,7 +271,6 @@ export class GameEngine {
       }
     }
 
-    // Enemy bullets vs player
     if (!this.player.isInvincible) {
       for (const bullet of bullets) {
         if (bullet.isPlayer || !bullet.active) continue;
@@ -251,7 +292,6 @@ export class GameEngine {
       }
     }
 
-    // Enemies vs player
     if (!this.player.isInvincible) {
       for (const enemy of enemies) {
         if (!enemy.active) continue;
@@ -273,7 +313,6 @@ export class GameEngine {
       }
     }
 
-    // Power-ups vs player
     const powerUps = this.powerUps.getActive();
     for (const powerUp of powerUps) {
       if (!powerUp.active) continue;
@@ -302,7 +341,6 @@ export class GameEngine {
     this.score += CONFIG.SCORE_PER_ENEMY * this.level;
     this.audio.playExplosion();
 
-    // Explosion particles
     this.particles.emit(
       enemy.x + enemy.width / 2,
       enemy.y + enemy.height / 2,
@@ -322,7 +360,6 @@ export class GameEngine {
       this.player.isInvincible = true;
       this.player.invincibleTimer = CONFIG.INVINCIBLE_DURATION;
 
-      // Damage particles
       this.particles.emit(
         this.player.x + this.player.width / 2,
         this.player.y + this.player.height / 2,
@@ -352,7 +389,6 @@ export class GameEngine {
         break;
     }
 
-    // Power-up particles
     this.particles.emit(
       this.player.x + this.player.width / 2,
       this.player.y + this.player.height / 2,
@@ -378,31 +414,61 @@ export class GameEngine {
     this.renderer.renderBackground(this.ctx);
     this.renderer.renderStars(this.ctx);
 
-    if (this.state === 'start') {
-      this.renderer.renderStartScreen(this.ctx);
-      return;
+    switch (this.state) {
+      case 'menu':
+        this.renderer.renderMainMenu(this.ctx, this.highScore);
+        break;
+
+      case 'playing':
+        this.enemies.render(this.ctx);
+        this.powerUps.render(this.ctx);
+        this.bullets.render(this.ctx);
+        renderPlayer(this.ctx, this.player, performance.now());
+        this.particles.render(this.ctx);
+        this.renderer.renderHUD(
+          this.ctx,
+          this.score,
+          this.player.lives,
+          this.level,
+          this.highScore,
+          this.input.getShootMode()
+        );
+        this.pauseBtnBounds = this.renderer.renderPauseButton(this.ctx);
+        break;
+
+      case 'paused':
+        this.enemies.render(this.ctx);
+        this.powerUps.render(this.ctx);
+        this.bullets.render(this.ctx);
+        renderPlayer(this.ctx, this.player, performance.now());
+        this.particles.render(this.ctx);
+        this.renderer.renderHUD(
+          this.ctx,
+          this.score,
+          this.player.lives,
+          this.level,
+          this.highScore,
+          this.input.getShootMode()
+        );
+        this.renderer.renderPauseScreen(this.ctx);
+        break;
+
+      case 'gameover':
+        this.enemies.render(this.ctx);
+        this.powerUps.render(this.ctx);
+        this.bullets.render(this.ctx);
+        this.particles.render(this.ctx);
+        this.renderer.renderGameOver(this.ctx, this.score, this.isNewHighScore);
+        break;
     }
 
-    this.enemies.render(this.ctx);
-    this.powerUps.render(this.ctx);
-    this.bullets.render(this.ctx);
-    renderPlayer(this.ctx, this.player, performance.now());
-    this.particles.render(this.ctx);
-    this.renderer.renderHUD(
-      this.ctx,
-      this.score,
-      this.player.lives,
-      this.level,
-      this.highScore,
-      this.input.getShootMode()
-    );
-
-    if (this.state === 'paused') {
-      this.renderer.renderPauseScreen(this.ctx);
-    }
-
-    if (this.state === 'gameover') {
-      this.renderer.renderGameOver(this.ctx, this.score, this.isNewHighScore);
+    // Update hover state for menu items
+    const mouse = this.input.getMousePosition();
+    if (mouse) {
+      const item = this.renderer.hitTestMenu(mouse.x, mouse.y);
+      this.renderer.setHoveredItem(item?.id ?? null);
+    } else {
+      this.renderer.setHoveredItem(null);
     }
   }
 
