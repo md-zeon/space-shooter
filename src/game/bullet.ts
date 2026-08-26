@@ -59,19 +59,20 @@ export class BulletPool {
     return bullet;
   }
 
-  acquireAngled(x: number, y: number, angle: number): Bullet {
+  acquireAngled(x: number, y: number, angle: number, speed?: number, _type?: string): Bullet {
     let bullet = this.pool.pop();
     if (!bullet) {
       bullet = this.create();
     }
 
+    const bSpeed = speed ?? CONFIG.ENEMY_BULLET_SPEED;
     bullet.isPlayer = false;
-    bullet.speed = CONFIG.ENEMY_BULLET_SPEED;
+    bullet.speed = bSpeed;
     bullet.active = true;
     bullet.x = x;
     bullet.y = y;
-    bullet.vx = Math.cos(angle) * bullet.speed;
-    bullet.vy = Math.sin(angle) * bullet.speed;
+    bullet.vx = Math.cos(angle) * bSpeed;
+    bullet.vy = Math.sin(angle) * bSpeed;
 
     this.active.push(bullet);
     return bullet;

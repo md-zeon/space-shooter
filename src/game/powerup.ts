@@ -1,6 +1,6 @@
 import { CONFIG } from './config';
 
-export type PowerUpType = 'shield' | 'weapon' | 'health' | 'score';
+export type PowerUpType = 'shield' | 'weapon' | 'health' | 'score' | 'bomb';
 
 export interface PowerUp {
   x: number;
@@ -8,17 +8,17 @@ export interface PowerUp {
   size: number;
   type: PowerUpType;
   active: boolean;
+  pulsePhase: number;
 }
 
 export class PowerUpManager {
   private powerUps: PowerUp[] = [];
   private spawnTimer: number = 0;
-  private spawnRate: number = 5000;
 
-  update(deltaTime: number, canvasHeight: number) {
+  update(deltaTime: number, canvasWidth: number, canvasHeight: number) {
     this.spawnTimer += deltaTime * 1000;
-    if (this.spawnTimer >= this.spawnRate) {
-      this.spawn(canvasHeight);
+    if (this.spawnTimer >= CONFIG.POWERUP_SPAWN_RATE) {
+      this.spawn(canvasWidth);
       this.spawnTimer = 0;
     }
 
@@ -27,6 +27,7 @@ export class PowerUpManager {
       if (!powerUp.active) continue;
 
       powerUp.y += CONFIG.POWERUP_SPEED * deltaTime * 60;
+      powerUp.pulsePhase += deltaTime * 5;
 
       if (powerUp.y > canvasHeight + powerUp.size) {
         this.remove(powerUp);
@@ -34,27 +35,40 @@ export class PowerUpManager {
     }
   }
 
-  spawn(canvasHeight: number) {
-    const types: PowerUpType[] = ['shield', 'weapon', 'health', 'score'];
-    const type = types[Math.floor(Math.random() * types.length)];
+  spawn(canvasWidth: number) {
+    const roll = Math.random();
+    let type: PowerUpType;
+    if (roll < 0.35) type = 'weapon';
+    else if (roll < 0.55) type = 'score';
+    else if (roll < 0.75) type = 'shield';
+    else if (roll < 0.9) type = 'health';
+    else type = 'bomb';
 
-    const powerUp: PowerUp = {
-      x: Math.random() * (CONFIG.WIDTH - CONFIG.POWERUP_SIZE),
+    this.powerUps.push({
+      x: 30 + Math.random() * (canvasWidth - 60),
       y: -CONFIG.POWERUP_SIZE,
       size: CONFIG.POWERUP_SIZE,
       type,
       active: true,
-    };
+      pulsePhase: 0,
+    });
+  }
 
-    this.powerUps.push(powerUp);
+  spawnAt(x: number, y: number, type: PowerUpType) {
+    this.powerUps.push({
+      x: x - CONFIG.POWERUP_SIZE / 2,
+      y,
+      size: CONFIG.POWERUP_SIZE,
+      type,
+      active: true,
+      pulsePhase: 0,
+    });
   }
 
   remove(powerUp: PowerUp) {
     powerUp.active = false;
     const index = this.powerUps.indexOf(powerUp);
-    if (index > -1) {
-      this.powerUps.splice(index, 1);
-    }
+    if (index > -1) this.powerUps.splice(index, 1);
   }
 
   render(ctx: CanvasRenderingContext2D) {
@@ -64,30 +78,27 @@ export class PowerUpManager {
       ctx.save();
 
       let color: string;
+      let label: string;
       switch (powerUp.type) {
-        case 'shield':
-          color = CONFIG.COLORS.POWERUP_SHIELD;
-          break;
-        case 'weapon':
-          color = CONFIG.COLORS.POWERUP_WEAPON;
-          break;
-        case 'health':
-          color = CONFIG.COLORS.POWERUP_HEALTH;
-          break;
-        case 'score':
-          color = CONFIG.COLORS.POWERUP_SCORE;
-          break;
+        case 'shield': color = CONFIG.COLORS.POWERUP_SHIELD; label = 'S'; break;
+        case 'weapon': color = CONFIG.COLORS.POWERUP_WEAPON; label = 'P'; break;
+        case 'health': color = CONFIG.COLORS.POWERUP_HEALTH; label = '+'; break;
+        case 'score': color = CONFIG.COLORS.POWERUP_SCORE; label = '$'; break;
+        case 'bomb': color = CONFIG.COLORS.POWERUP_BOMB; label = 'B'; break;
       }
 
-      ctx.shadowColor = color;
-      ctx.shadowBlur = 15;
-      ctx.fillStyle = color;
-
+      const pulse = 1 + Math.sin(powerUp.pulsePhase) * 0.1;
+      const size = powerUp.size * pulse;
       const centerX = powerUp.x + powerUp.size / 2;
       const centerY = powerUp.y + powerUp.size / 2;
-      const radius = powerUp.size / 2;
+      const radius = size / 2;
+
+      // Outer glow
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 15 + Math.sin(powerUp.pulsePhase) * 5;
 
       // Diamond shape
+      ctx.fillStyle = color;
       ctx.beginPath();
       ctx.moveTo(centerX, centerY - radius);
       ctx.lineTo(centerX + radius, centerY);
@@ -96,12 +107,19 @@ export class PowerUpManager {
       ctx.closePath();
       ctx.fill();
 
-      // Inner glow
+      // Border
+      ctx.strokeStyle = '#FFFFFF';
+      ctx.lineWidth = 1;
+      ctx.globalAlpha = 0.5;
+      ctx.stroke();
+
+      // Inner label
+      ctx.globalAlpha = 1;
       ctx.fillStyle = '#FFFFFF';
-      ctx.globalAlpha = 0.6;
-      ctx.beginPath();
-      ctx.arc(centerX, centerY, radius * 0.3, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.font = `bold ${Math.floor(size * 0.4)}px "Press Start 2P"`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(label, centerX, centerY + 1);
 
       ctx.restore();
     }
