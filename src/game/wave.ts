@@ -10,6 +10,7 @@ export interface WaveGroup {
   speed?: number;
   shootPattern?: string;
   delay?: number;
+  movementPattern?: string;
 }
 
 export interface Wave {
@@ -250,8 +251,80 @@ export class WaveManager {
   generateWaves() {
     this.waves = [];
 
-    for (let w = 0; w < 200; w++) {
-      const waveNum = w + 1;
+    // Waves 1-10 are AUTHORED (deterministic teaching ladder) per research:
+    // RESEARCH-FIRST-10-WAVES.md section 9. Each wave teaches one new mechanic
+    // on top of the last, building to the first boss-with-minions wave (wave 10).
+    // Wave 9 is a calm / pre-boss relief wave.
+    const authored: Wave[] = [
+      // Wave 1 — "The Lesson": 3 grunts, no fire.
+      { groups: [
+        { type: 'basic', formation: 'line', count: 3, movementPattern: 'straight', shootPattern: 'none', delay: 0 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 2 — formation + aim practice: 4 grunts in a V, no shots yet.
+      { groups: [
+        { type: 'basic', formation: 'vshape', count: 4, movementPattern: 'straight', shootPattern: 'none', delay: 0 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 3 — two types: 2 "tank" flyers (advanced, more HP) fire single aimed
+      // bullets; 3 grunts lead. First enemy projectiles.
+      { groups: [
+        { type: 'basic', formation: 'line', count: 3, movementPattern: 'straight', shootPattern: 'none', delay: 0 },
+        { type: 'advanced', formation: 'line', count: 2, movementPattern: 'straight', shootPattern: 'aimed', delay: 700 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 4 — squad coordination + entry fire: individual diver grunts + aimed
+      // tanks. Divers use 'random' so they break away and swoop independently.
+      { groups: [
+        { type: 'basic', formation: 'random', count: 3, movementPattern: 'swoop', shootPattern: 'none', delay: 0 },
+        { type: 'advanced', formation: 'line', count: 3, movementPattern: 'straight', shootPattern: 'aimed', delay: 500 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 5 — first leader (elite dash) + escort divers + tanks; mourning reset.
+      { groups: [
+        { type: 'elite', formation: 'random', count: 1, movementPattern: 'dash', shootPattern: 'spread3', delay: 0 },
+        { type: 'basic', formation: 'random', count: 2, movementPattern: 'swoop', shootPattern: 'none', delay: 200 },
+        { type: 'advanced', formation: 'line', count: 4, movementPattern: 'straight', shootPattern: 'aimed', delay: 800 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 6 — heavier budget, alternating coordinated dives (two diver squads).
+      { groups: [
+        { type: 'basic', formation: 'random', count: 4, movementPattern: 'swoop', shootPattern: 'none', delay: 0 },
+        { type: 'basic', formation: 'random', count: 4, movementPattern: 'swoop', shootPattern: 'none', delay: 900 },
+        { type: 'advanced', formation: 'line', count: 2, movementPattern: 'straight', shootPattern: 'spread3', delay: 400 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 7 — speed spike + pattern ceiling: V at higher speed, combine dive + shot.
+      { groups: [
+        { type: 'basic', formation: 'vshape', count: 6, movementPattern: 'straight', speed: CONFIG.ENEMY_SPEED + 1, shootPattern: 'aimed', delay: 0 },
+        { type: 'advanced', formation: 'grid', count: 6, movementPattern: 'straight', shootPattern: 'spread3', delay: 600 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 8 — shielded/armored minions + ganging: forces target priority.
+      { groups: [
+        { type: 'advanced', formation: 'pincer', count: 6, movementPattern: 'sinewave', shootPattern: 'aimed', delay: 0 },
+        { type: 'advanced', formation: 'line', count: 6, movementPattern: 'straight', shootPattern: 'spread3', delay: 500 },
+        { type: 'elite', formation: 'diamond', count: 1, movementPattern: 'hover', shootPattern: 'spread5', delay: 1000 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 9 — calm / pre-boss relief: light, open field, lower density.
+      { groups: [
+        { type: 'basic', formation: 'line', count: 4, movementPattern: 'straight', shootPattern: 'none', delay: 0 },
+        { type: 'elite', formation: 'vshape', count: 1, movementPattern: 'hover', shootPattern: 'spread3', delay: 1200 },
+      ], isBossWave: false, isBossPrep: true },
+
+      // Wave 10 — FIRST BOSS WITH MINIONS (capstone; handled by BossManager).
+      { groups: [], isBossWave: true, isBossPrep: false },
+    ];
+
+    for (let i = 0; i < authored.length; i++) {
+      this.waves.push(authored[i]);
+    }
+
+    // Waves 11-200: procedural escalation (existing generator), appended after
+    // the authored opener so the researched 1-10 arc plays first.
+    for (let w = authored.length + 1; w <= 200; w++) {
+      const waveNum = w;
       const tier = Math.min(Math.floor(waveNum / 3), 3);
 
       if (waveNum % 10 === 0) {
@@ -294,7 +367,9 @@ export class WaveManager {
 
     for (const group of wave.groups) {
       const positions = generateFormation(group.formation, group.count, canvasWidth);
-      const movement = getMovementPattern(group.formation, group.type);
+      const movement = group.movementPattern || getMovementPattern(group.formation, group.type);
+      const shootPattern = group.shootPattern || getShootPattern(group.type, this.difficulty);
+      const speed = group.speed ?? CONFIG.ENEMY_SPEED + Math.random() * this.difficulty * 0.3;
 
       const formationId = group.formation !== 'random' ? nextFormationId++ : -1;
       const cx = positions.reduce((s, p) => s + p.x, 0) / positions.length;
@@ -305,9 +380,9 @@ export class WaveManager {
           type: group.type,
           x: positions[i].x,
           y: positions[i].y,
-          speed: CONFIG.ENEMY_SPEED + Math.random() * this.difficulty * 0.3,
+          speed,
           movementPattern: movement,
-          shootPattern: getShootPattern(group.type, this.difficulty),
+          shootPattern,
           delay: (group.delay || 0) + i * 80,
           formationId,
           offsetX: positions[i].x - cx,
