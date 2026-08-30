@@ -1,6 +1,6 @@
 import { CONFIG } from './config';
 
-export type EnemyType = 'basic' | 'advanced' | 'elite';
+export type EnemyType = 'basic' | 'advanced' | 'elite' | 'wall';
 
 export interface Enemy {
   x: number;
@@ -67,11 +67,12 @@ export class EnemyManager {
     offsetX: number = 0,
     offsetY: number = 0
   ) {
-    const health = type === 'elite' ? 4 : type === 'advanced' ? 2 : 1;
+    const isWall = type === 'wall';
+    const health = isWall ? 3 : type === 'elite' ? 4 : type === 'advanced' ? 2 : 1;
     this.enemies.push({
       x, y,
-      width: type === 'elite' ? 35 : CONFIG.ENEMY_WIDTH,
-      height: type === 'elite' ? 35 : CONFIG.ENEMY_HEIGHT,
+      width: isWall ? 30 : type === 'elite' ? 35 : CONFIG.ENEMY_WIDTH,
+      height: isWall ? 80 : type === 'elite' ? 35 : CONFIG.ENEMY_HEIGHT,
       speed,
       health,
       maxHealth: health,
@@ -304,6 +305,18 @@ export class EnemyManager {
             break;
           }
 
+          case 'wall': {
+            // Barricade: descends slowly, parks for a beat, then sinks off.
+            if (enemy.patternTimer < 1200) {
+              enemy.y += speed * 0.5;
+            } else if (enemy.patternTimer < 5200) {
+              // parked — no vertical movement
+            } else {
+              enemy.y += speed * 1.6;
+            }
+            break;
+          }
+
           default:
             enemy.y += speed;
         }
@@ -460,6 +473,10 @@ export class EnemyManager {
           color = CONFIG.COLORS.ENEMY_ELITE;
           shape = 'hexagon';
           break;
+        case 'wall':
+          color = CONFIG.COLORS.ENEMY_WALL;
+          shape = 'wall';
+          break;
       }
 
       ctx.fillStyle = color;
@@ -498,6 +515,25 @@ export class EnemyManager {
         ctx.moveTo(centerX + 5, centerY);
         ctx.lineTo(enemy.x + enemy.width - 3, centerY);
         ctx.stroke();
+      } else if (shape === 'wall') {
+        // Barricade: tall slab with a glowing core — the wall reads as blocking a lane.
+        ctx.fillStyle = color;
+        ctx.globalAlpha = 0.55;
+        ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
+        ctx.globalAlpha = 1;
+
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 2;
+        ctx.strokeRect(enemy.x + 1, enemy.y + 1, enemy.width - 2, enemy.height - 2);
+
+        const coreColor = enemy.maxHealth > 3 ? '#FFCC00' : '#FFFFFF';
+        ctx.fillStyle = coreColor;
+        ctx.shadowColor = coreColor;
+        ctx.shadowBlur = 12;
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, 5, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
       } else {
         const hw = enemy.width / 2;
         const hh = enemy.height / 2;

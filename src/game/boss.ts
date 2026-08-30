@@ -2,8 +2,8 @@ import { CONFIG } from './config';
 
 export type BossPhase = 1 | 2 | 3;
 export type BossAttackType = 'radial' | 'aimed_stream' | 'spiral' | 'fan' | 'laser' | 'ring' | 'composite' | 'shockwave' | 'soundwave';
-export type BossId = 'cipher' | 'nexus' | 'void' | 'omega' | 'abyss';
-export type MinionType = 'basic' | 'shooter' | 'shield';
+export type BossId = 'cipher' | 'spider' | 'void' | 'omega' | 'abyss';
+export type MinionType = 'basic' | 'shooter' | 'shield' | 'rusher';
 
 export interface BossBulletRequest {
   x: number;
@@ -51,6 +51,8 @@ export interface BossState {
   dying: boolean;
   deathTimer: number;
   flashTimer: number;
+  coreOpen: boolean;
+  legPhase: number;
   name: string;
   bossId: BossId;
   color: string;
@@ -81,10 +83,10 @@ const BOSS_DEFS: BossDef[] = [
     minionTypes: ['basic'], minionCount: 2, minionInterval: 6000,
   },
   {
-    id: 'nexus', name: 'NEXUS', width: 80, height: 80,
-    color: CONFIG.COLORS.BOSS_NEXUS, baseHp: 120, speed: 1.2, targetY: 60,
-    attacks: ['fan', 'ring', 'laser', 'soundwave'],
-    minionTypes: ['shooter'], minionCount: 3, minionInterval: 5000,
+    id: 'spider', name: 'SPIDER', width: 90, height: 70,
+    color: CONFIG.COLORS.BOSS_SPIDER, baseHp: 100, speed: 2.2, targetY: 55,
+    attacks: ['aimed_stream', 'fan', 'radial', 'shockwave'],
+    minionTypes: ['rusher'], minionCount: 3, minionInterval: 4500,
   },
   {
     id: 'void', name: 'VOID', width: 90, height: 90,
@@ -144,6 +146,8 @@ export class BossManager {
       dying: false,
       deathTimer: 0,
       flashTimer: 0,
+      coreOpen: true,
+      legPhase: 0,
       name: def.name,
       bossId: def.id,
       color: def.color,
@@ -211,10 +215,12 @@ export class BossManager {
           this.boss.targetX = 40 + Math.random() * (canvasWidth - this.boss.width - 80);
         }
         break;
-      case 'nexus':
-        if (this.boss.moveTimer > 4000) {
+      case 'spider':
+        // Steps side to side — frequent lateral repositioning (the "stepping-limb" roamer).
+        if (this.boss.moveTimer > 1100) {
           this.boss.moveTimer = 0;
-          this.boss.targetX = canvasWidth / 2 - this.boss.width / 2 + (Math.random() - 0.5) * 100;
+          this.boss.targetX = 40 + Math.random() * (canvasWidth - this.boss.width - 80);
+          this.boss.legPhase += 1;
         }
         break;
       case 'void':
@@ -421,7 +427,7 @@ export class BossManager {
 
   private spawnMinion(type: MinionType) {
     if (!this.boss) return;
-    const health = type === 'shield' ? 3 : type === 'shooter' ? 2 : 1;
+    const health = type === 'shield' ? 3 : type === 'shooter' || type === 'rusher' ? 2 : 1;
     const width = type === 'shield' ? 25 : 20;
     const height = type === 'shield' ? 25 : 20;
 
@@ -458,6 +464,12 @@ export class BossManager {
           if (m.y > CONFIG.HEIGHT + 30) m.active = false;
           break;
 
+        case 'rusher':
+          // Dive-rusher: descends fast from the top along its column (runs the walls).
+          m.y += 5 * dt60;
+          if (m.y > CONFIG.HEIGHT + 30) m.active = false;
+          break;
+
         case 'shooter': {
           const targetY = 100 + Math.sin(m.patternTimer * 0.001) * 30;
           if (m.y < targetY) {
@@ -486,6 +498,7 @@ export class BossManager {
 
   takeDamage(amount: number): boolean {
     if (!this.boss || !this.boss.active || this.boss.invulnerable || this.boss.dying || this.boss.entering) return false;
+    if (this.boss.bossId === 'spider' && !this.boss.coreOpen) return false;
 
     this.boss.health -= amount;
     this.boss.flashTimer = 100;
@@ -505,6 +518,10 @@ export class BossManager {
 
     if (newPhase > this.boss.phase) {
       this.boss.phase = newPhase;
+      // Spider: belly-core opens in phases 1 and 3, closes during phase 2.
+      if (this.boss.bossId === 'spider') {
+        this.boss.coreOpen = newPhase !== 2;
+      }
       this.boss.phaseTransitioning = true;
       this.boss.phaseTransitionTimer = 1500;
       this.boss.invulnerable = true;

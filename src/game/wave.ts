@@ -315,14 +315,80 @@ export class WaveManager {
 
       // Wave 10 — FIRST BOSS WITH MINIONS (capstone; handled by BossManager).
       { groups: [], isBossWave: true, isBossPrep: false },
+
+      // ===== Decade 2 (waves 11-20): Wall / Barricade archetype =====
+      // New verb: route re-negotiation — walls block lanes, forcing repositioning.
+      // D2 entry grammar: side flankers + top sweeps.
+
+      // Wave 11 — Air/recovery after boss 10: recap, bigger counts, no new gimmick.
+      { groups: [
+        { type: 'basic', formation: 'line', count: 6, movementPattern: 'swoop', shootPattern: 'none', delay: 0 },
+        { type: 'basic', formation: 'line', count: 5, movementPattern: 'straight', shootPattern: 'aimed', delay: 500 },
+        { type: 'elite', formation: 'random', count: 1, movementPattern: 'dash', shootPattern: 'spread3', delay: 1200 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 12 — First wall: wide barricades descend, park, no shots. Move before they settle.
+      { groups: [
+        { type: 'wall', formation: 'random', count: 2, movementPattern: 'wall', shootPattern: 'none', delay: 0 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 13 — Wall + swarmers flood around it.
+      { groups: [
+        { type: 'wall', formation: 'random', count: 1, movementPattern: 'wall', shootPattern: 'none', delay: 0 },
+        { type: 'basic', formation: 'line', count: 8, movementPattern: 'swoop', shootPattern: 'none', delay: 400 },
+        { type: 'basic', formation: 'line', count: 6, movementPattern: 'straight', shootPattern: 'none', delay: 900 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 14 — Two walls staggered pinning a corridor; rushers dive the gap.
+      { groups: [
+        { type: 'wall', formation: 'random', count: 2, movementPattern: 'wall', shootPattern: 'none', delay: 200 },
+        { type: 'elite', formation: 'random', count: 2, movementPattern: 'swoop', shootPattern: 'spread3', delay: 700 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 15 — Walls that lower/raise in rhythm (timed cycles); grunts dive during low phase.
+      { groups: [
+        { type: 'wall', formation: 'random', count: 2, movementPattern: 'wall', shootPattern: 'none', delay: 0 },
+        { type: 'basic', formation: 'line', count: 5, movementPattern: 'swoop', shootPattern: 'none', delay: 900 },
+        { type: 'basic', formation: 'line', count: 5, movementPattern: 'swoop', shootPattern: 'none', delay: 1800 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 16 — Wall + aimed-fire tanks (route + bullets at once).
+      { groups: [
+        { type: 'wall', formation: 'random', count: 1, movementPattern: 'wall', shootPattern: 'none', delay: 0 },
+        { type: 'advanced', formation: 'line', count: 4, movementPattern: 'straight', shootPattern: 'aimed', delay: 500 },
+        { type: 'elite', formation: 'random', count: 1, movementPattern: 'hover', shootPattern: 'spread3', delay: 1000 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 17 — Faster walls, tighter gaps, more swarmers (weather rising).
+      { groups: [
+        { type: 'wall', formation: 'random', count: 2, movementPattern: 'wall', speed: CONFIG.ENEMY_SPEED + 2, shootPattern: 'none', delay: 0 },
+        { type: 'basic', formation: 'line', count: 8, movementPattern: 'swoop', shootPattern: 'aimed', delay: 500 },
+        { type: 'basic', formation: 'line', count: 6, movementPattern: 'straight', shootPattern: 'none', delay: 1000 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 18 — Shielded wall (needs multiple hits) parking a key lane; prioritize it.
+      { groups: [
+        { type: 'wall', formation: 'random', count: 2, movementPattern: 'wall', shootPattern: 'none', delay: 0 },
+        { type: 'advanced', formation: 'line', count: 4, movementPattern: 'straight', shootPattern: 'aimed', delay: 600 },
+        { type: 'elite', formation: 'random', count: 1, movementPattern: 'dash', shootPattern: 'spread5', delay: 1100 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 19 — Calm / pre-boss relief: fewer walls, open field, score-chain setup.
+      { groups: [
+        { type: 'basic', formation: 'line', count: 5, movementPattern: 'straight', shootPattern: 'none', delay: 0 },
+        { type: 'basic', formation: 'line', count: 5, movementPattern: 'swoop', shootPattern: 'none', delay: 600 },
+      ], isBossWave: false, isBossPrep: true },
+
+      // Wave 20 — BOSS: The Spider War Machine (BossManager handles it).
+      { groups: [], isBossWave: true, isBossPrep: false },
     ];
 
     for (let i = 0; i < authored.length; i++) {
       this.waves.push(authored[i]);
     }
 
-    // Waves 11-200: procedural escalation (existing generator), appended after
-    // the authored opener so the researched 1-10 arc plays first.
+    // Waves 21-200: procedural escalation (existing generator), appended after
+    // the authored openers so the researched 1-20 arc plays first.
     for (let w = authored.length + 1; w <= 200; w++) {
       const waveNum = w;
       const tier = Math.min(Math.floor(waveNum / 3), 3);

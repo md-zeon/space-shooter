@@ -1146,6 +1146,25 @@ export class GameEngine {
           ctx.fill();
           break;
 
+        case 'rusher':
+          ctx.fillStyle = boss.color;
+          ctx.shadowColor = boss.color;
+          ctx.shadowBlur = 10;
+          ctx.beginPath();
+          ctx.moveTo(cx, m.y + m.height);
+          ctx.lineTo(m.x + m.width, m.y + m.height * 0.3);
+          ctx.lineTo(cx + m.width * 0.15, m.y + m.height * 0.3);
+          ctx.lineTo(cx, m.y);
+          ctx.lineTo(cx - m.width * 0.15, m.y + m.height * 0.3);
+          ctx.lineTo(m.x, m.y + m.height * 0.3);
+          ctx.closePath();
+          ctx.fill();
+          ctx.fillStyle = '#FFFFFF';
+          ctx.beginPath();
+          ctx.arc(cx, m.y + m.height * 0.55, 2, 0, Math.PI * 2);
+          ctx.fill();
+          break;
+
         case 'shooter':
           ctx.fillStyle = '#FF6666';
           ctx.shadowColor = '#FF6666';
@@ -1238,29 +1257,44 @@ export class GameEngine {
         break;
       }
 
-      case 'nexus': {
-        const hw = boss.width / 2;
-        const hh = boss.height / 2;
+      case 'spider': {
+        // Step limps on each side + low wide body + belly-core weak point.
+        const legStep = Math.sin(boss.legPhase ? boss.patternTimer * 0.02 + boss.legPhase : 0) * 3;
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = boss.color;
         ctx.beginPath();
-        for (let i = 0; i < 6; i++) {
-          const angle = (i / 6) * Math.PI * 2 - Math.PI / 2;
-          const px = cx + Math.cos(angle) * hw * 0.9;
-          const py = cy + Math.sin(angle) * hh * 0.9;
-          if (i === 0) ctx.moveTo(px, py);
-          else ctx.lineTo(px, py);
-        }
-        ctx.closePath();
+        // left legs
+        ctx.moveTo(boss.x + boss.width * 0.15, cy);
+        ctx.lineTo(boss.x - 8, boss.y + boss.height * 0.3 + legStep - 6);
+        ctx.moveTo(boss.x + boss.width * 0.22, cy);
+        ctx.lineTo(boss.x - 10, boss.y + boss.height * 0.6 + legStep);
+        ctx.moveTo(boss.x + boss.width * 0.15, boss.y + boss.height);
+        ctx.lineTo(boss.x - 6, boss.y + boss.height + 6 + legStep);
+        // right legs
+        ctx.moveTo(boss.x + boss.width * 0.85, cy);
+        ctx.lineTo(boss.x + boss.width + 8, boss.y + boss.height * 0.3 - legStep - 6);
+        ctx.moveTo(boss.x + boss.width * 0.78, cy);
+        ctx.lineTo(boss.x + boss.width + 10, boss.y + boss.height * 0.6 - legStep);
+        ctx.moveTo(boss.x + boss.width * 0.85, boss.y + boss.height);
+        ctx.lineTo(boss.x + boss.width + 6, boss.y + boss.height + 6 - legStep);
+        ctx.stroke();
+        ctx.lineWidth = 1;
+
+        // Low rounded body
+        ctx.fillStyle = boss.color;
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, boss.width * 0.42, boss.height * 0.42, 0, 0, Math.PI * 2);
         ctx.fill();
 
-        for (let i = 0; i < 6; i++) {
-          const angle = (i / 6) * Math.PI * 2 - Math.PI / 2;
-          const px = cx + Math.cos(angle) * hw * 0.5;
-          const py = cy + Math.sin(angle) * hh * 0.5;
-          ctx.fillStyle = '#FFFFFF';
-          ctx.beginPath();
-          ctx.arc(px, py, 3, 0, Math.PI * 2);
-          ctx.fill();
-        }
+        // Belly-core (bright when open = vulnerable, dim when closed).
+        const coreOpen = boss.coreOpen;
+        ctx.fillStyle = coreOpen ? '#FFE000' : '#554400';
+        ctx.shadowColor = coreOpen ? '#FFE000' : 'transparent';
+        ctx.shadowBlur = coreOpen ? 15 : 0;
+        ctx.beginPath();
+        ctx.arc(cx, boss.y + boss.height * 0.78, 7, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
         break;
       }
 
@@ -1333,7 +1367,7 @@ export class GameEngine {
     ctx.fillStyle = boss.phase === 3 ? '#FF00FF' : boss.phase === 2 ? '#FF6600' : '#FFFFFF';
     ctx.shadowColor = ctx.fillStyle;
     ctx.shadowBlur = 12;
-    if (boss.bossId !== 'void') {
+    if (boss.bossId !== 'void' && boss.bossId !== 'spider') {
       ctx.beginPath();
       ctx.arc(cx, eyeY, boss.width * 0.08, 0, Math.PI * 2);
       ctx.fill();
