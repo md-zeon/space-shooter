@@ -1,6 +1,6 @@
 import { CONFIG } from './config';
 
-export type EnemyType = 'basic' | 'advanced' | 'elite' | 'wall' | 'splinterer';
+export type EnemyType = 'basic' | 'advanced' | 'elite' | 'wall' | 'splinterer' | 'rusher';
 
 export interface Enemy {
   x: number;
@@ -23,7 +23,10 @@ export interface Enemy {
   offsetX: number;
   offsetY: number;
   aimShards: boolean;
+  shieldHp: number;
 }
+
+/** A tile of an enemy that must be stripped (shield/armor) before core damage. */
 
 export interface EnemyBulletRequest {
   x: number;
@@ -68,15 +71,17 @@ export class EnemyManager {
     offsetX: number = 0,
     offsetY: number = 0,
     hp?: number,
-    aimShards: boolean = false
+    aimShards: boolean = false,
+    shieldHp?: number
   ) {
     const isWall = type === 'wall';
     const isSplinterer = type === 'splinterer';
+    const isRusher = type === 'rusher';
     const health = hp ?? (isWall ? 3 : type === 'elite' ? 4 : type === 'advanced' ? 2 : isSplinterer ? 1 : 1);
     this.enemies.push({
       x, y,
-      width: isWall ? 30 : type === 'elite' ? 35 : CONFIG.ENEMY_WIDTH,
-      height: isWall ? 80 : type === 'elite' ? 35 : CONFIG.ENEMY_HEIGHT,
+      width: isWall ? 30 : type === 'elite' ? 35 : isRusher ? 26 : CONFIG.ENEMY_WIDTH,
+      height: isWall ? 80 : type === 'elite' ? 35 : isRusher ? 26 : CONFIG.ENEMY_HEIGHT,
       speed,
       health,
       maxHealth: health,
@@ -93,6 +98,7 @@ export class EnemyManager {
       offsetX,
       offsetY,
       aimShards,
+      shieldHp: shieldHp ?? 0,
     });
 
     if (formationId >= 0 && !this.formationOrigins.has(formationId)) {
@@ -189,6 +195,12 @@ export class EnemyManager {
         const swoopT = origin.patternTimer * 0.002;
         origin.x += Math.cos(swoopT) * speed * 0.8;
         origin.y += speed * 0.7;
+        break;
+      }
+
+      case 'rusher': {
+        // Dive-rusher: fast straight dive down its column (wall-runner).
+        origin.y += speed * 2.4;
         break;
       }
 
@@ -322,6 +334,26 @@ export class EnemyManager {
             break;
           }
 
+          case 'wallRhythm': {
+            // Wall that lowers and raises in rhythm: descends to a park, then
+            // pumps vertically so the gap opens briefly (grunts dive through it).
+            if (enemy.patternTimer < 1200) {
+              enemy.y += speed * 0.6;
+            } else {
+              const cycle = 2200;
+              const t = (enemy.patternTimer - 1200) % cycle;
+              // Sinks then rises on a sine — creates a breathing low/high cycle.
+              enemy.y += Math.sin((t / cycle) * Math.PI * 2) * 0.6 * speed;
+            }
+            break;
+          }
+
+          case 'rusher': {
+            // Dive-rusher: fast straight dive down its column (wall-runner).
+            enemy.y += speed * 2.4;
+            break;
+          }
+
           default:
             enemy.y += speed;
         }
@@ -446,6 +478,28 @@ export class EnemyManager {
     if (index > -1) this.enemies.splice(index, 1);
   }
 
+  /**
+   * Apply core damage to an enemy, honoring shields: while shieldHp remains it
+   * absorbs the hit (the shield must be stripped before the core takes damage).
+   * Returns true if the enemy died from this hit.
+   */
+  damageEnemy(enemy: Enemy, amount: number): boolean {
+    if (!enemy.active) return false;
+    if (enemy.shieldHp > 0) {
+      enemy.shieldHp -= amount;
+      enemy.flashTimer = 100;
+      if (enemy.shieldHp <= 0) enemy.shieldHp = 0;
+      return false;
+    }
+    enemy.health -= amount;
+    enemy.flashTimer = 100;
+    if (enemy.health <= 0) {
+      this.remove(enemy);
+      return true;
+    }
+    return false;
+  }
+
   render(ctx: CanvasRenderingContext2D) {
     for (const enemy of this.enemies) {
       if (!enemy.active) continue;
@@ -485,6 +539,10 @@ export class EnemyManager {
         case 'splinterer':
           color = CONFIG.COLORS.ENEMY_SPLINTERER;
           shape = 'splinterer';
+          break;
+        case 'rusher':
+          color = CONFIG.COLORS.ENEMY_RUSHER;
+          shape = 'rusher';
           break;
       }
 
@@ -564,6 +622,19 @@ export class EnemyManager {
         ctx.beginPath();
         ctx.arc(centerX, centerY, 3, 0, Math.PI * 2);
         ctx.fill();
+      } else if (shape === 'rusher') {
+        // Dive-dart: narrow, fast, reads as a wall-runner bullet.
+        ctx.beginPath();
+        ctx.moveTo(centerX, enemy.y + enemy.height);
+        ctx.lineTo(enemy.x + enemy.width * 0.85, enemy.y + enemy.height * 0.2);
+        ctx.lineTo(enemy.x + enemy.width * 0.5, enemy.y + enemy.height * 0.45);
+        ctx.lineTo(enemy.x + enemy.width * 0.15, enemy.y + enemy.height * 0.2);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = '#FFFFFF';
+        ctx.beginPath();
+        ctx.arc(centerX, enemy.y + enemy.height * 0.55, 2.5, 0, Math.PI * 2);
+        ctx.fill();
       } else {
         const hw = enemy.width / 2;
         const hh = enemy.height / 2;
@@ -599,6 +670,19 @@ export class EnemyManager {
         ctx.fillRect(barX, barY, barWidth, barHeight);
         ctx.fillStyle = CONFIG.COLORS.HP_BAR_FILL;
         ctx.fillRect(barX, barY, barWidth * (enemy.health / enemy.maxHealth), barHeight);
+      }
+
+      // Shield ring: visible while a shield is up — it must be stripped first.
+      if (enemy.shieldHp > 0) {
+        const shieldColor = CONFIG.COLORS.ENEMY_SHIELD;
+        ctx.strokeStyle = shieldColor;
+        ctx.shadowColor = shieldColor;
+        ctx.shadowBlur = 10;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, Math.max(enemy.width, enemy.height) * 0.62, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.shadowBlur = 0;
       }
 
       ctx.restore();

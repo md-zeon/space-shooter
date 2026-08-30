@@ -221,7 +221,7 @@ export class GameEngine {
         cmd.type, cmd.x, cmd.y, cmd.speed,
         cmd.movementPattern, cmd.shootPattern,
         cmd.formationId, cmd.offsetX, cmd.offsetY,
-        cmd.hp, cmd.aimShards
+        cmd.hp, cmd.aimShards, cmd.shieldHp
       );
     }
 
@@ -350,10 +350,7 @@ export class GameEngine {
     const enemies = this.enemies.getActive();
     for (const e of enemies) {
       if (!e.active) continue;
-      e.health -= 5;
-      if (e.health <= 0) {
-        this.onEnemyKilled(e);
-      }
+      if (this.enemies.damageEnemy(e, 5)) this.onEnemyKilled(e);
     }
 
     if (this.boss.isBossActive()) {
@@ -375,8 +372,7 @@ export class GameEngine {
     for (const e of enemies) {
       if (!e.active) continue;
       if (Math.random() < 0.1) {
-        e.health -= 1;
-        if (e.health <= 0) this.onEnemyKilled(e);
+        if (this.enemies.damageEnemy(e, 1)) this.onEnemyKilled(e);
       }
     }
   }
@@ -482,9 +478,7 @@ export class GameEngine {
         { x: lx, y: ly, width: lw, height: lh },
         { x: e.x, y: e.y, width: e.width, height: e.height }
       )) {
-        e.health -= CONFIG.LASER_DAMAGE;
-        e.flashTimer = 50;
-        if (e.health <= 0) this.onEnemyKilled(e);
+        if (this.enemies.damageEnemy(e, CONFIG.LASER_DAMAGE)) this.onEnemyKilled(e);
       }
     }
 
@@ -532,13 +526,12 @@ export class GameEngine {
           { x: bullet.x, y: bullet.y, width: bullet.width, height: bullet.height },
           { x: enemy.x, y: enemy.y, width: enemy.width, height: enemy.height }
         )) {
-          enemy.health--;
-          enemy.flashTimer = 100;
+          const died = this.enemies.damageEnemy(enemy, 1);
           bullet.active = false;
           this.bullets.release(bullet);
           this.audio.playEnemyHit();
 
-          if (enemy.health <= 0) {
+          if (died) {
             this.onEnemyKilled(enemy);
           }
 

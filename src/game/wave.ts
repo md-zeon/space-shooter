@@ -13,6 +13,7 @@ export interface WaveGroup {
   movementPattern?: string;
   hp?: number;
   aimShards?: boolean;
+  shieldHp?: number;
 }
 
 export interface Wave {
@@ -34,6 +35,7 @@ export interface SpawnCommand {
   offsetY: number;
   hp?: number;
   aimShards?: boolean;
+  shieldHp?: number;
 }
 
 const FORMATION_POOL: FormationType[] = [
@@ -260,7 +262,8 @@ export class WaveManager {
     // Waves 1-10 are AUTHORED (deterministic teaching ladder) per research:
     // RESEARCH-FIRST-10-WAVES.md section 9. Each wave teaches one new mechanic
     // on top of the last, building to the first boss-with-minions wave (wave 10).
-    // Wave 9 is a calm / pre-boss relief wave.
+    // Wave 9 is the 18-enemy cumulative synthesis / pre-boss stress test; the
+    // "wave-9 calm" convention applies to decades 2+ (see RESEARCH-WAVES-11-100.md).
     const authored: Wave[] = [
       // Wave 1 — "The Lesson": 3 grunts, no fire.
       { groups: [
@@ -279,11 +282,13 @@ export class WaveManager {
         { type: 'advanced', formation: 'line', count: 2, movementPattern: 'straight', shootPattern: 'aimed', delay: 700 },
       ], isBossWave: false, isBossPrep: false },
 
-      // Wave 4 — squad coordination + entry fire: individual diver grunts + aimed
-      // tanks. Divers use 'random' so they break away and swoop independently.
+      // Wave 4 — squad coordination + entry fire: one-side single long-row entry,
+      // tanks fire entry pulses; two grunts peel into a mirrored pincer dive
+      // (the gap between them is dodgeable). per research §9 wave 4.
       { groups: [
-        { type: 'basic', formation: 'random', count: 3, movementPattern: 'swoop', shootPattern: 'none', delay: 0 },
-        { type: 'advanced', formation: 'line', count: 3, movementPattern: 'straight', shootPattern: 'aimed', delay: 500 },
+        { type: 'advanced', formation: 'line', count: 3, movementPattern: 'straight', shootPattern: 'aimed', delay: 0 },
+        { type: 'basic', formation: 'line', count: 3, movementPattern: 'straight', shootPattern: 'none', delay: 250 },
+        { type: 'basic', formation: 'pincer', count: 2, movementPattern: 'sinewave', shootPattern: 'none', delay: 500 },
       ], isBossWave: false, isBossPrep: false },
 
       // Wave 5 — first leader (elite dash) + escort divers + tanks; mourning reset.
@@ -293,31 +298,44 @@ export class WaveManager {
         { type: 'advanced', formation: 'line', count: 4, movementPattern: 'straight', shootPattern: 'aimed', delay: 800 },
       ], isBossWave: false, isBossPrep: false },
 
-      // Wave 6 — heavier budget, alternating coordinated dives (two diver squads).
+      // Wave 6 — heavier budget, alternating coordinated dives (two squads side by
+      // side = 10 enemies: 4+4 divers in mirrored pincers + 2 tanks screening).
       { groups: [
-        { type: 'basic', formation: 'random', count: 4, movementPattern: 'swoop', shootPattern: 'none', delay: 0 },
-        { type: 'basic', formation: 'random', count: 4, movementPattern: 'swoop', shootPattern: 'none', delay: 900 },
+        { type: 'basic', formation: 'pincer', count: 4, movementPattern: 'sinewave', shootPattern: 'none', delay: 0 },
+        { type: 'basic', formation: 'pincer', count: 4, movementPattern: 'swoop', shootPattern: 'none', delay: 900 },
         { type: 'advanced', formation: 'line', count: 2, movementPattern: 'straight', shootPattern: 'spread3', delay: 400 },
       ], isBossWave: false, isBossPrep: false },
 
-      // Wave 7 — speed spike + pattern ceiling: V at higher speed, combine dive + shot.
+      // Wave 7 — speed spike + pattern ceiling: single V flight at higher speed,
+      // grunts dive+fire mid-dive, tanks lay a horizontal spread (both types
+      // arrive as one faster V: 12 enemies).
       { groups: [
-        { type: 'basic', formation: 'vshape', count: 6, movementPattern: 'straight', speed: CONFIG.ENEMY_SPEED + 1, shootPattern: 'aimed', delay: 0 },
-        { type: 'advanced', formation: 'grid', count: 6, movementPattern: 'straight', shootPattern: 'spread3', delay: 600 },
+        { type: 'basic', formation: 'vshape', count: 6, movementPattern: 'straight', speed: CONFIG.ENEMY_SPEED + 1.5, shootPattern: 'aimed', delay: 0 },
+        { type: 'basic', formation: 'vshape', count: 3, movementPattern: 'straight', speed: CONFIG.ENEMY_SPEED + 1.5, shootPattern: 'aimed', delay: 150 },
+        { type: 'advanced', formation: 'vshape', count: 3, movementPattern: 'straight', speed: CONFIG.ENEMY_SPEED + 1, shootPattern: 'spread5', delay: 300 },
       ], isBossWave: false, isBossPrep: false },
 
       // Wave 8 — shielded/armored minions + ganging: forces target priority.
+      // 15 enemies: shielded grunt squad (shield strip = targeting decision),
+      // tanks screening fire, an elite. Gang of 3 shielded grunts dives at once.
       { groups: [
         { type: 'advanced', formation: 'pincer', count: 6, movementPattern: 'sinewave', shootPattern: 'aimed', delay: 0 },
-        { type: 'advanced', formation: 'line', count: 6, movementPattern: 'straight', shootPattern: 'spread3', delay: 500 },
+        { type: 'basic', formation: 'grid', count: 6, movementPattern: 'straight', shootPattern: 'aimed', shieldHp: 1, delay: 300 },
+        { type: 'basic', formation: 'diamond', count: 2, movementPattern: 'swoop', shootPattern: 'aimed', shieldHp: 1, delay: 800 },
         { type: 'elite', formation: 'diamond', count: 1, movementPattern: 'hover', shootPattern: 'spread5', delay: 1000 },
       ], isBossWave: false, isBossPrep: false },
 
-      // Wave 9 — calm / pre-boss relief: light, open field, lower density.
+      // Wave 9 — "Full synthesis" pre-boss stress test: 18 enemies — leaders,
+      // shielded grunts, tanks, entry fire, pincer dives. A cumulative exam of
+      // every tool taught in 1-8 before the wave-10 boss (per research §9.0/§9).
       { groups: [
-        { type: 'basic', formation: 'line', count: 4, movementPattern: 'straight', shootPattern: 'none', delay: 0 },
-        { type: 'elite', formation: 'vshape', count: 1, movementPattern: 'hover', shootPattern: 'spread3', delay: 1200 },
-      ], isBossWave: false, isBossPrep: true },
+        { type: 'advanced', formation: 'line', count: 5, movementPattern: 'straight', shootPattern: 'aimed', delay: 0 },
+        { type: 'basic', formation: 'random', count: 3, movementPattern: 'swoop', shootPattern: 'aimed', shieldHp: 2, delay: 200 },
+        { type: 'elite', formation: 'random', count: 1, movementPattern: 'dash', shootPattern: 'spread5', delay: 400 },
+        { type: 'basic', formation: 'pincer', count: 4, movementPattern: 'sinewave', shootPattern: 'aimed', delay: 600 },
+        { type: 'advanced', formation: 'grid', count: 4, movementPattern: 'straight', shootPattern: 'spread5', delay: 800 },
+        { type: 'elite', formation: 'random', count: 1, movementPattern: 'hover', shootPattern: 'spiral', delay: 1000 },
+      ], isBossWave: false, isBossPrep: false },
 
       // Wave 10 — FIRST BOSS WITH MINIONS (capstone; handled by BossManager).
       { groups: [], isBossWave: true, isBossPrep: false },
@@ -348,12 +366,12 @@ export class WaveManager {
       // Wave 14 — Two walls staggered pinning a corridor; rushers dive the gap.
       { groups: [
         { type: 'wall', formation: 'random', count: 2, movementPattern: 'wall', shootPattern: 'none', delay: 200 },
-        { type: 'elite', formation: 'random', count: 2, movementPattern: 'swoop', shootPattern: 'spread3', delay: 700 },
+        { type: 'rusher', formation: 'random', count: 4, movementPattern: 'rusher', shootPattern: 'none', delay: 700 },
       ], isBossWave: false, isBossPrep: false },
 
       // Wave 15 — Walls that lower/raise in rhythm (timed cycles); grunts dive during low phase.
       { groups: [
-        { type: 'wall', formation: 'random', count: 2, movementPattern: 'wall', shootPattern: 'none', delay: 0 },
+        { type: 'wall', formation: 'random', count: 2, movementPattern: 'wallRhythm', shootPattern: 'none', delay: 0 },
         { type: 'basic', formation: 'line', count: 5, movementPattern: 'swoop', shootPattern: 'none', delay: 900 },
         { type: 'basic', formation: 'line', count: 5, movementPattern: 'swoop', shootPattern: 'none', delay: 1800 },
       ], isBossWave: false, isBossPrep: false },
@@ -374,7 +392,7 @@ export class WaveManager {
 
       // Wave 18 — Shielded wall (needs multiple hits) parking a key lane; prioritize it.
       { groups: [
-        { type: 'wall', formation: 'random', count: 2, movementPattern: 'wall', shootPattern: 'none', delay: 0 },
+        { type: 'wall', formation: 'random', count: 2, movementPattern: 'wall', shootPattern: 'none', delay: 0, shieldHp: 2 },
         { type: 'advanced', formation: 'line', count: 4, movementPattern: 'straight', shootPattern: 'aimed', delay: 600 },
         { type: 'elite', formation: 'random', count: 1, movementPattern: 'dash', shootPattern: 'spread5', delay: 1100 },
       ], isBossWave: false, isBossPrep: false },
@@ -400,9 +418,9 @@ export class WaveManager {
         { type: 'advanced', formation: 'line', count: 3, movementPattern: 'straight', shootPattern: 'aimed', delay: 900 },
       ], isBossWave: false, isBossPrep: false },
 
-      // Wave 22 — First splinterer: death splits into 4 fast shards (cross).
+      // Wave 22 — First splinterer: ONE enemy; death splits into 4 fast shards.
       { groups: [
-        { type: 'splinterer', formation: 'vshape', count: 3, movementPattern: 'straight', shootPattern: 'none', delay: 0 },
+        { type: 'splinterer', formation: 'vshape', count: 1, movementPattern: 'straight', shootPattern: 'none', delay: 0 },
       ], isBossWave: false, isBossPrep: false },
 
       // Wave 23 — Splinterers mixed with swarmers: choose what to pop where.
@@ -437,7 +455,7 @@ export class WaveManager {
       { groups: [
         { type: 'splinterer', formation: 'vshape', count: 3, movementPattern: 'straight', shootPattern: 'none', aimShards: true, delay: 0 },
         { type: 'advanced', formation: 'line', count: 3, movementPattern: 'straight', shootPattern: 'aimed', delay: 400 },
-        { type: 'elite', formation: 'random', count: 1, movementPattern: 'dash', shootPattern: 'spread5', delay: 900 },
+        { type: 'rusher', formation: 'random', count: 4, movementPattern: 'rusher', shootPattern: 'none', delay: 900 },
         { type: 'splinterer', formation: 'vshape', count: 2, movementPattern: 'straight', shootPattern: 'none', aimShards: true, delay: 1300 },
       ], isBossWave: false, isBossPrep: false },
 
@@ -530,6 +548,7 @@ export class WaveManager {
           offsetY: positions[i].y - cy,
           hp: group.hp,
           aimShards: group.aimShards,
+          shieldHp: group.shieldHp,
         });
       }
     }

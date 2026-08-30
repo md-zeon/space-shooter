@@ -83,6 +83,8 @@ export const CONFIG = {
     ENEMY_WALL: '#00B3A0',
     ENEMY_SPLINTERER: '#FFCC00',
     ENEMY_SPLINTERER_SHARD: '#FFE000',
+    ENEMY_RUSHER: '#00FF88',
+    ENEMY_SHIELD: '#2299FF',
     ENEMY_GLOW: 'rgba(255, 0, 68, 0.3)',
     BOSS: '#FF0066',
     BOSS_GLOW: 'rgba(255, 0, 102, 0.4)',
