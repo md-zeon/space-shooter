@@ -966,6 +966,8 @@ export class GameEngine {
           case 'aimed': color = CONFIG.COLORS.BULLET_ENEMY_AIMED; break;
           case 'spiral': color = CONFIG.COLORS.BULLET_ENEMY_SPIRAL; break;
           case 'laser': color = CONFIG.COLORS.BULLET_ENEMY_LASER; break;
+          case 'shockwave': color = CONFIG.COLORS.BULLET_ENEMY_SHOCKWAVE; break;
+          case 'soundwave': color = CONFIG.COLORS.BULLET_ENEMY_SOUNDWAVE; break;
           default: color = CONFIG.COLORS.BULLET_ENEMY; break;
         }
 
@@ -994,15 +996,36 @@ export class GameEngine {
         ctx.shadowColor = color;
         ctx.shadowBlur = 14;
         ctx.fillStyle = color;
-        ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
+        if (bullet.bulletType === 'shockwave') {
+          ctx.beginPath();
+          ctx.arc(bullet.x + bullet.width / 2, bullet.y + bullet.height / 2, bullet.width / 2, 0, Math.PI * 2);
+          ctx.fill();
+
+          ctx.strokeStyle = color;
+          ctx.globalAlpha = 0.5;
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(bullet.x + bullet.width / 2, bullet.y + bullet.height / 2, bullet.width, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+        } else if (bullet.bulletType === 'soundwave') {
+          // Wide pulse wall with a bright leading edge
+          ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+          ctx.fillRect(bullet.x, bullet.y, bullet.width, 3);
+        } else {
+          ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
+        }
 
         // White core for contrast
         ctx.shadowBlur = 0;
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-        ctx.fillRect(
-          bullet.x + 1, bullet.y + 1,
-          bullet.width - 2, bullet.height - 2
-        );
+        if (bullet.bulletType !== 'shockwave' && bullet.bulletType !== 'soundwave') {
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+          ctx.fillRect(
+            bullet.x + 1, bullet.y + 1,
+            bullet.width - 2, bullet.height - 2
+          );
+        }
       }
       ctx.restore();
     }

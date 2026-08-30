@@ -1,7 +1,7 @@
 import { CONFIG } from './config';
 
 export type BossPhase = 1 | 2 | 3;
-export type BossAttackType = 'radial' | 'aimed_stream' | 'spiral' | 'fan' | 'laser' | 'ring' | 'composite';
+export type BossAttackType = 'radial' | 'aimed_stream' | 'spiral' | 'fan' | 'laser' | 'ring' | 'composite' | 'shockwave' | 'soundwave';
 export type BossId = 'cipher' | 'nexus' | 'void' | 'omega' | 'abyss';
 export type MinionType = 'basic' | 'shooter' | 'shield';
 
@@ -77,31 +77,31 @@ const BOSS_DEFS: BossDef[] = [
   {
     id: 'cipher', name: 'CIPHER', width: 60, height: 60,
     color: CONFIG.COLORS.BOSS_CIPHER, baseHp: 80, speed: 2.5, targetY: 60,
-    attacks: ['radial', 'aimed_stream'],
+    attacks: ['radial', 'aimed_stream', 'shockwave'],
     minionTypes: ['basic'], minionCount: 2, minionInterval: 6000,
   },
   {
     id: 'nexus', name: 'NEXUS', width: 80, height: 80,
     color: CONFIG.COLORS.BOSS_NEXUS, baseHp: 120, speed: 1.2, targetY: 60,
-    attacks: ['fan', 'ring', 'laser'],
+    attacks: ['fan', 'ring', 'laser', 'soundwave'],
     minionTypes: ['shooter'], minionCount: 3, minionInterval: 5000,
   },
   {
     id: 'void', name: 'VOID', width: 90, height: 90,
     color: CONFIG.COLORS.BOSS_VOID, baseHp: 160, speed: 0, targetY: 60,
-    attacks: ['spiral', 'composite', 'radial'],
+    attacks: ['spiral', 'composite', 'radial', 'shockwave'],
     minionTypes: ['basic', 'shooter'], minionCount: 4, minionInterval: 4000,
   },
   {
     id: 'omega', name: 'OMEGA', width: 110, height: 80,
     color: CONFIG.COLORS.BOSS_OMEGA, baseHp: 220, speed: 0.5, targetY: 50,
-    attacks: ['laser', 'ring', 'fan'],
+    attacks: ['laser', 'ring', 'fan', 'soundwave'],
     minionTypes: ['shield'], minionCount: 2, minionInterval: 7000,
   },
   {
     id: 'abyss', name: 'ABYSS', width: 100, height: 100,
     color: CONFIG.COLORS.BOSS_ABYSS, baseHp: 300, speed: 1.5, targetY: 60,
-    attacks: ['radial', 'aimed_stream', 'spiral', 'fan', 'laser', 'ring', 'composite'],
+    attacks: ['radial', 'aimed_stream', 'spiral', 'fan', 'laser', 'ring', 'composite', 'shockwave', 'soundwave'],
     minionTypes: ['basic', 'shooter', 'shield'], minionCount: 3, minionInterval: 3500,
   },
 ];
@@ -348,6 +348,32 @@ export class BossManager {
               const a = (i / 8) * Math.PI * 2 + this.boss.patternTimer * 0.003;
               requests.push({ x: cx, y: cy, angle: a, type: 'radial' });
             }
+          }
+          break;
+        }
+        case 'shockwave': {
+          // Expanding concentric rings (slow) — dodge by reading the gaps between
+          // rings rather than outrunning the whole nova.
+          if (Math.floor(this.boss.patternTimer / 600) > Math.floor((this.boss.patternTimer - deltaTime * 1000) / 600)) {
+            const rings = this.boss.phase >= 3 ? 3 : this.boss.phase >= 2 ? 2 : 1;
+            const count = this.boss.phase >= 2 ? 24 : 16;
+            const ringGap = 0.18;
+            for (let ring = 0; ring < rings; ring++) {
+              for (let i = 0; i < count; i++) {
+                const base = (i / count) * Math.PI * 2 + ring * ringGap;
+                requests.push({ x: cx, y: cy, angle: base, speed: 1.6 + ring * 0.4, type: 'shockwave' });
+              }
+            }
+          }
+          break;
+        }
+        case 'soundwave': {
+          // Telegraphed full-arena pulse: a long no-fire wind-up, then a slow
+          // wide wavefront descends — a single timing-dodge.
+          if (this.boss.patternTimer < 700) {
+            // Wind-up / charge telegraph (no bullets yet)
+          } else if (Math.floor(this.boss.patternTimer / 500) > Math.floor((this.boss.patternTimer - deltaTime * 1000) / 500)) {
+            requests.push({ x: CONFIG.WIDTH / 2, y: cy, angle: Math.PI / 2, speed: this.boss.phase >= 2 ? 2.6 : 2.2, type: 'soundwave' });
           }
           break;
         }

@@ -1,6 +1,6 @@
 import { CONFIG } from './config';
 
-export type BulletType = 'player' | 'straight' | 'aimed' | 'spread' | 'radial' | 'spiral' | 'burst' | 'fan' | 'ring' | 'laser';
+export type BulletType = 'player' | 'straight' | 'aimed' | 'spread' | 'radial' | 'spiral' | 'burst' | 'fan' | 'ring' | 'laser' | 'shockwave' | 'soundwave';
 
 export interface Bullet {
   x: number;
@@ -25,6 +25,8 @@ const ENEMY_BULLET_SIZES: Record<string, { w: number; h: number }> = {
   fan: { w: 6, h: 6 },
   ring: { w: 5, h: 5 },
   laser: { w: 3, h: 14 },
+  shockwave: { w: 9, h: 9 },
+  soundwave: { w: 60, h: 10 },
 };
 
 export class BulletPool {
