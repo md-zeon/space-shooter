@@ -65,6 +65,10 @@ export default function Game() {
     engineRef.current?.pressBomb();
   };
 
+  const handleSpecial = () => {
+    engineRef.current?.pressSpecial();
+  };
+
   return (
     <div className="flex items-center justify-center h-screen w-screen bg-[#050A1A] overflow-hidden">
       <canvas
@@ -82,6 +86,15 @@ export default function Game() {
         title={shootMode === 'auto' ? 'Auto fire' : 'Manual fire'}
       >
         {shootMode === 'auto' ? 'A' : 'M'}
+      </button>
+      <button
+        onClick={handleSpecial}
+        className="absolute bottom-28 right-4 w-11 h-11 flex items-center justify-center 
+                   text-[10px] font-mono text-[#00FFFF] border border-[#00FFFF]/40 
+                   hover:border-[#00FFFF] hover:bg-[#00FFFF]/10 transition-colors rounded-full"
+        title="Special (max power laser)"
+      >
+        ✷
       </button>
       <button
         onClick={handleBomb}

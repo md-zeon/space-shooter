@@ -1323,6 +1323,10 @@ export class GameEngine {
     if (this.state === 'playing') this.activateBomb();
   }
 
+  pressSpecial() {
+    if (this.state === 'playing') this.activateLaser();
+  }
+
   toggleShootMode(): 'auto' | 'manual' {
     const current = this.input.getShootMode();
     const newMode = current === 'auto' ? 'manual' : 'auto';
