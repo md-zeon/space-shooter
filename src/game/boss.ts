@@ -52,6 +52,7 @@ export interface BossState {
   deathTimer: number;
   flashTimer: number;
   coreOpen: boolean;
+  coreCycleTimer: number;
   legPhase: number;
   name: string;
   bossId: BossId;
@@ -147,6 +148,7 @@ export class BossManager {
       deathTimer: 0,
       flashTimer: 0,
       coreOpen: def.id !== 'turrets',
+      coreCycleTimer: 0,
       legPhase: 0,
       name: def.name,
       bossId: def.id,
@@ -195,12 +197,56 @@ export class BossManager {
       BOSS_DEFS.length - 1
     )];
 
+    this.updateCoreState(deltaTime);
     this.updateMovement(deltaTime, canvasWidth, bossDef);
     requests.push(...this.updateAttacks(deltaTime, canvasWidth, playerX, bossDef));
     this.updateMinionSpawning(deltaTime);
     this.updateMinions(deltaTime, canvasWidth, playerX);
 
     return requests;
+  }
+
+  /**
+   * Keep the boss's weak point (core) state in sync.
+   *  - Turret-Cruiser: the outer turret RING (shield minions) is the shield —
+   *    destroy every ring turret to expose the core ("the ring is the minions;
+   *    core exposed"). New ring turrets re-close it.
+   *  - Spider: the belly-core is a TIMED CYCLE — it opens so the player can
+   *    deal damage, then closes while the spider steps and volleys, then opens
+   *    again. Phase 1 teaches (always open); phase 2+ cycles closed->open.
+   */
+  private updateCoreState(deltaTime: number) {
+    if (!this.boss) return;
+
+    if (this.boss.bossId === 'turrets') {
+      // Outer ring present == core sealed. Ring gone == core exposed.
+      const ringAlive = this.boss.minions.some(m => m.active && m.type === 'shield');
+      this.boss.coreOpen = !ringAlive;
+      return;
+    }
+
+    if (this.boss.bossId === 'spider') {
+      if (this.boss.phase === 1) {
+        // Phase A teaches "shoot the core": stays open.
+        this.boss.coreOpen = true;
+        this.boss.coreCycleTimer = 0;
+        return;
+      }
+      // Phase B/C: timed close-then-open cycle so the player always gets a
+      // window to damage (the belly-core reopens; spider focuses on dodging).
+      const closedDuration = 1800;
+      const openDuration = 2200;
+      this.boss.coreCycleTimer += deltaTime * 1000;
+      const cycle = closedDuration + openDuration;
+      const t = this.boss.coreCycleTimer % cycle;
+      this.boss.coreOpen = t >= closedDuration;
+      // Skip the cycle while transitioning so it feels gentle.
+      if (this.boss.phaseTransitioning) this.boss.coreOpen = true;
+      return;
+    }
+
+    // All other bosses: always damageable (core stays exposed).
+    this.boss.coreOpen = true;
   }
 
   private updateMovement(deltaTime: number, canvasWidth: number, def: BossDef) {
@@ -522,16 +568,10 @@ export class BossManager {
 
     if (newPhase > this.boss.phase) {
       this.boss.phase = newPhase;
-      // Per-boss core exposure:
-      //  - spider: belly-core opens in phases 1 and 3, closes during phase 2.
-      //  - turrets: the turret-cruiser's core only exposes in phase C (the final
-      //    "hull breached" phase) — phases 1-2 are the outer-ring + hull-laser
-      //    assault where it is invulnerable.
-      if (this.boss.bossId === 'spider') {
-        this.boss.coreOpen = newPhase !== 2;
-      } else if (this.boss.bossId === 'turrets') {
-        this.boss.coreOpen = newPhase === 3;
-      }
+      // Reset spider's core cycle so the next open/close cycle restarts cleanly.
+      this.boss.coreCycleTimer = 0;
+      // The core-open flag is owned by updateCoreState (turrets: destroy the
+      // ring; spider: timed cycle). Just pause briefly for the reveal.
       this.boss.phaseTransitioning = true;
       this.boss.phaseTransitionTimer = 1500;
       this.boss.invulnerable = true;
