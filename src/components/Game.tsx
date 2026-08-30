@@ -61,6 +61,10 @@ export default function Game() {
     }
   };
 
+  const handleBomb = () => {
+    engineRef.current?.pressBomb();
+  };
+
   return (
     <div className="flex items-center justify-center h-screen w-screen bg-[#050A1A] overflow-hidden">
       <canvas
@@ -78,6 +82,15 @@ export default function Game() {
         title={shootMode === 'auto' ? 'Auto fire' : 'Manual fire'}
       >
         {shootMode === 'auto' ? 'A' : 'M'}
+      </button>
+      <button
+        onClick={handleBomb}
+        className="absolute bottom-16 right-4 w-8 h-8 flex items-center justify-center 
+                   text-[10px] font-mono text-[#FF8C00] border border-[#FF8C00]/40 
+                   hover:border-[#FF8C00] hover:bg-[#FF8C00]/10 transition-colors rounded"
+        title="Bomb"
+      >
+        B
       </button>
     </div>
   );

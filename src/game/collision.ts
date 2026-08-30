@@ -14,6 +14,18 @@ export function checkCollision(a: Rectangle, b: Rectangle): boolean {
   );
 }
 
+export function getPlayerHitbox(x: number, y: number, width: number, height: number): Rectangle {
+  const inset = 0.3;
+  const hw = (width * (1 - inset)) / 2;
+  const hh = (height * (1 - inset)) / 2;
+  return {
+    x: x + width / 2 - hw,
+    y: y + height / 2 - hh,
+    width: hw * 2,
+    height: hh * 2,
+  };
+}
+
 export function checkCircleCollision(
   x1: number,
   y1: number,

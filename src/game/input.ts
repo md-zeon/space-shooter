@@ -15,7 +15,7 @@ export class InputManager {
   private mouseX: number = 0;
   private mouseY: number = 0;
   private hasMouse: boolean = false;
-  private backButtonConsumed: boolean = false;
+  private backButtonConsumed: boolean = true;
 
   // Touch position tracking (direct follow with offset)
   private touchX: number = 0;

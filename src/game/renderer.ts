@@ -87,6 +87,7 @@ export class Renderer {
     laserCharge: number = 0,
     laserActive: boolean = false,
     narrowTimer: number = 0,
+    graze: number = 0,
   ) {
     ctx.save();
 
@@ -169,16 +170,17 @@ export class Renderer {
       const lBarY = this.canvasHeight - 22;
       ctx.fillStyle = '#1A1D2E';
       ctx.fillRect(lBarX, lBarY, lBarW, lBarH);
+      const ready = !laserActive && laserCharge >= CONFIG.LASER_CHARGE_TIME;
       const chargePercent = laserActive ? 1 : Math.min(1, laserCharge / CONFIG.LASER_CHARGE_TIME);
-      ctx.fillStyle = laserActive ? CONFIG.COLORS.LASER_BEAM : CONFIG.COLORS.POWERUP_NARROW;
+      ctx.fillStyle = laserActive ? CONFIG.COLORS.LASER_BEAM : ready ? CONFIG.COLORS.POWERUP_NARROW : CONFIG.COLORS.POWERUP_NARROW;
       ctx.shadowColor = ctx.fillStyle;
-      ctx.shadowBlur = laserActive ? 8 : 3;
+      ctx.shadowBlur = ready ? (Math.floor(Date.now() / 150) % 2 === 0 ? 12 : 3) : 3;
       ctx.fillRect(lBarX, lBarY, lBarW * chargePercent, lBarH);
       ctx.shadowBlur = 0;
-      ctx.fillStyle = CONFIG.COLORS.TEXT_MUTED;
+      ctx.fillStyle = ready ? CONFIG.COLORS.PLAYER : CONFIG.COLORS.TEXT_MUTED;
       ctx.font = '5px "Press Start 2P"';
       ctx.textAlign = 'left';
-      ctx.fillText(laserActive ? 'LASER' : 'CHARGE', lBarX, lBarY - 2);
+      ctx.fillText(laserActive ? 'LASER' : ready ? 'READY [L]' : 'CHARGE', lBarX, lBarY - 2);
     }
 
     // Narrow indicator
@@ -206,6 +208,12 @@ export class Renderer {
     ctx.fillStyle = CONFIG.COLORS.TEXT_MUTED;
     ctx.textAlign = 'left';
     ctx.fillText(shootMode === 'auto' ? 'AUTO' : 'MANUAL', 10, this.canvasHeight - 10);
+
+    // Graze counter
+    if (graze > 0) {
+      ctx.fillStyle = CONFIG.COLORS.PLAYER;
+      ctx.fillText(`GRAZE ${graze}`, 60, this.canvasHeight - 10);
+    }
 
     ctx.restore();
   }
@@ -373,8 +381,10 @@ export class Renderer {
     ctx.font = '6px "Press Start 2P"';
     ctx.fillStyle = CONFIG.COLORS.TEXT_MUTED;
     ctx.fillText('ARROW KEYS / WASD TO MOVE', this.canvasWidth / 2, this.canvasHeight / 2 + 100);
-    ctx.fillText('TAP LEFT TO MOVE, RIGHT TO SHOOT', this.canvasWidth / 2, this.canvasHeight / 2 + 115);
-    ctx.fillText('B / TAP BOTTOM TO BOMB', this.canvasWidth / 2, this.canvasHeight / 2 + 130);
+    ctx.fillText('TAP ANYWHERE TO MOVE & SHOOT', this.canvasWidth / 2, this.canvasHeight / 2 + 115);
+    ctx.fillText('B / BOMB BUTTON TO BOMB', this.canvasWidth / 2, this.canvasHeight / 2 + 130);
+    ctx.fillText('L (MAX PWR) TO FIRE LASER', this.canvasWidth / 2, this.canvasHeight / 2 + 145);
+    ctx.fillText('GRAZE BULLETS FOR BONUS', this.canvasWidth / 2, this.canvasHeight / 2 + 160);
 
     ctx.restore();
   }

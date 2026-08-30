@@ -1,13 +1,13 @@
 import { CONFIG } from './config';
 import { InputManager } from './input';
 import { Player, createPlayer, updatePlayer, renderPlayer } from './player';
-import { BulletPool } from './bullet';
+import { BulletPool, Bullet } from './bullet';
 import { EnemyManager } from './enemy';
 import { ParticleSystem } from './particles';
 import { PowerUpManager } from './powerup';
 import { AudioManager } from './audio';
 import { Renderer } from './renderer';
-import { checkCollision } from './collision';
+import { checkCollision, getPlayerHitbox } from './collision';
 import { WaveManager } from './wave';
 import { BossManager } from './boss';
 
@@ -54,6 +54,11 @@ export class GameEngine {
   // Boss defeat tracking
   private bossDefeatTimer: number = 0;
   private wasTouching: boolean = false;
+
+  // Graze
+  private grazeCount: number = 0;
+  private grazePulse: number = 0;
+  private grazedBullets = new Set<Bullet>();
 
   constructor() {
     this.input = new InputManager();
@@ -122,6 +127,7 @@ export class GameEngine {
         this.updateChain(deltaTime);
         this.updateNarrow(deltaTime);
         this.updateLaser(deltaTime);
+        this.updateGraze(deltaTime);
         this.checkCollisions();
         this.checkWaveAnnouncements();
         this.checkWarning();
@@ -165,10 +171,16 @@ export class GameEngine {
         if (this.input.isKeyJustPressed('Escape') || this.input.consumeBackButton()) {
           this.state = 'paused';
         }
-        if (this.input.isKeyJustPressed('b') || this.input.isKeyJustPressed('B')) {
-          this.activateBomb();
-        }
-        break;
+    if (this.input.isKeyJustPressed('b') || this.input.isKeyJustPressed('B')) {
+      this.activateBomb();
+    }
+    if (this.input.isKeyJustPressed('l') || this.input.isKeyJustPressed('L')) {
+      this.activateLaser();
+    }
+    if (this.input.isKeyJustPressed('z') || this.input.isKeyJustPressed('Z')) {
+      this.activateLaser();
+    }
+    break;
 
       case 'paused':
         if (click) {
@@ -415,6 +427,17 @@ export class GameEngine {
     }
   }
 
+  private activateLaser() {
+    if (this.player.powerLevel < CONFIG.MAX_POWER_LEVEL) return;
+    if (this.player.laserActive) return;
+    if (this.player.laserCharge < CONFIG.LASER_CHARGE_TIME) return;
+    this.player.laserActive = true;
+    this.player.laserTimer = CONFIG.LASER_DURATION;
+    this.player.laserDmgTimer = 0;
+    this.audio.playExplosion();
+    this.particles.addShake(4);
+  }
+
   private updateLaser(deltaTime: number) {
     if (this.player.powerLevel < CONFIG.MAX_POWER_LEVEL) {
       this.player.laserCharge = 0;
@@ -435,15 +458,11 @@ export class GameEngine {
         this.player.laserActive = false;
         this.player.laserCharge = 0;
       }
-    } else {
-      this.player.laserCharge += deltaTime * 1000;
-      if (this.player.laserCharge >= CONFIG.LASER_CHARGE_TIME) {
-        this.player.laserActive = true;
-        this.player.laserTimer = CONFIG.LASER_DURATION;
-        this.player.laserDmgTimer = 0;
-        this.audio.playExplosion();
-        this.particles.addShake(4);
-      }
+    } else if (this.player.laserCharge < CONFIG.LASER_CHARGE_TIME) {
+      this.player.laserCharge = Math.min(
+        CONFIG.LASER_CHARGE_TIME,
+        this.player.laserCharge + deltaTime * 1000
+      );
     }
   }
 
@@ -570,13 +589,20 @@ export class GameEngine {
             4, '#FFFFFF',
             { speed: 3, size: 2 }
           );
-          if (died) this.onBossDefeated();
+          this.particles.addShake(2);
+          if (died) {
+            this.particles.addHitstop(6);
+            this.onBossDefeated();
+          }
         }
       }
     }
 
     // Enemy bullets vs player
     if (!this.player.isInvincible && !this.bombActive) {
+      const hitbox = getPlayerHitbox(
+        this.player.x, this.player.y, this.player.width, this.player.height
+      );
       let hit = false;
       for (let bi = 0; bi < bullets.length; bi++) {
         const bullet = bullets[bi];
@@ -584,7 +610,7 @@ export class GameEngine {
 
         if (checkCollision(
           { x: bullet.x, y: bullet.y, width: bullet.width, height: bullet.height },
-          { x: this.player.x, y: this.player.y, width: this.player.width, height: this.player.height }
+          hitbox
         )) {
           bullet.active = false;
           this.bullets.release(bullet);
@@ -592,18 +618,24 @@ export class GameEngine {
             hit = true;
             this.onPlayerHit();
           }
+          continue;
         }
+
+        this.checkGraze(bullet);
       }
     }
 
     // Enemies vs player
     if (!this.player.isInvincible && !this.bombActive) {
+      const playerHitbox = getPlayerHitbox(
+        this.player.x, this.player.y, this.player.width, this.player.height
+      );
       for (const enemy of enemies) {
         if (!enemy.active) continue;
 
         if (checkCollision(
           { x: enemy.x, y: enemy.y, width: enemy.width, height: enemy.height },
-          { x: this.player.x, y: this.player.y, width: this.player.width, height: this.player.height }
+          playerHitbox
         )) {
           this.onPlayerHit();
           this.onEnemyKilled(enemy);
@@ -614,10 +646,13 @@ export class GameEngine {
 
     // Boss vs player
     if (!this.player.isInvincible && !this.bombActive && this.boss.isBossActive()) {
+      const playerHitbox = getPlayerHitbox(
+        this.player.x, this.player.y, this.player.width, this.player.height
+      );
       const boss = this.boss.getBoss();
       if (boss && checkCollision(
         { x: boss.x, y: boss.y, width: boss.width, height: boss.height },
-        { x: this.player.x, y: this.player.y, width: this.player.width, height: this.player.height }
+        playerHitbox
       )) {
         this.onPlayerHit();
       }
@@ -689,12 +724,44 @@ export class GameEngine {
     }
   }
 
+  private checkGraze(bullet: Bullet) {
+    if (this.player.isInvincible || this.bombActive) return;
+    if (this.grazedBullets.has(bullet)) return;
+
+    const gx = this.player.x + this.player.width / 2;
+    const gy = this.player.y + this.player.height / 2;
+    const gz = this.player.width * 0.7;
+
+    const bx = bullet.x + bullet.width / 2;
+    const by = bullet.y + bullet.height / 2;
+    const dx = bx - gx;
+    const dy = by - gy;
+    if (dx * dx + dy * dy < gz * gz) {
+      this.grazedBullets.add(bullet);
+      this.grazeCount++;
+      this.grazePulse = 1;
+      this.score += 10;
+      this.audio.playEnemyHit();
+      this.particles.emit(bx, by, 3, CONFIG.COLORS.PLAYER, { speed: 2, size: 1.5 });
+    }
+  }
+
+  private updateGraze(deltaTime: number) {
+    if (this.grazePulse > 0) this.grazePulse -= deltaTime * 2;
+    for (const bullet of this.bullets.getActive()) {
+      if (!bullet.active && this.grazedBullets.has(bullet)) {
+        this.grazedBullets.delete(bullet);
+      }
+    }
+  }
+
   private onPlayerHit() {
     this.player.lives--;
     this.chain = 0;
     this.player.isInvincible = true;
     this.audio.playDamage();
     this.particles.addShake(8);
+    this.particles.addHitstop(6);
     this.particles.flash('#FF0000', 0.3);
 
     if (this.player.lives <= 0) {
@@ -777,6 +844,9 @@ export class GameEngine {
     this.warningActive = false;
     this.warningTimer = 0;
     this.bossDefeatTimer = 0;
+    this.grazeCount = 0;
+    this.grazePulse = 0;
+    this.grazedBullets.clear();
     this.player = createPlayer(CONFIG.WIDTH, CONFIG.HEIGHT);
     this.bullets.clear();
     this.enemies.clear();
@@ -940,6 +1010,24 @@ export class GameEngine {
 
     renderPlayer(ctx, this.player, performance.now());
 
+    if (this.grazePulse > 0) {
+      ctx.save();
+      ctx.globalAlpha = this.grazePulse * 0.8;
+      ctx.strokeStyle = CONFIG.COLORS.PLAYER;
+      ctx.shadowColor = CONFIG.COLORS.PLAYER;
+      ctx.shadowBlur = 15;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(
+        this.player.x + this.player.width / 2,
+        this.player.y + this.player.height / 2,
+        this.player.width * (0.8 - this.grazePulse * 0.3),
+        0, Math.PI * 2
+      );
+      ctx.stroke();
+      ctx.restore();
+    }
+
     if (this.bombActive) {
       ctx.save();
       const progress = 1 - this.bombTimer / CONFIG.BOMB_DURATION;
@@ -988,7 +1076,7 @@ export class GameEngine {
       this.input.getShootMode(), this.player.powerLevel,
       this.player.bombs, this.chain,
       this.player.laserCharge, this.player.laserActive,
-      this.player.narrowTimer
+      this.player.narrowTimer, this.grazeCount
     );
 
     const bossState = this.boss.getBoss();
@@ -1229,6 +1317,10 @@ export class GameEngine {
     }
 
     ctx.restore();
+  }
+
+  pressBomb() {
+    if (this.state === 'playing') this.activateBomb();
   }
 
   toggleShootMode(): 'auto' | 'manual' {
