@@ -2,7 +2,7 @@ import { CONFIG } from './config';
 
 export type BossPhase = 1 | 2 | 3;
 export type BossAttackType = 'radial' | 'aimed_stream' | 'spiral' | 'fan' | 'laser' | 'ring' | 'composite' | 'shockwave' | 'soundwave';
-export type BossId = 'cipher' | 'spider' | 'void' | 'omega' | 'abyss';
+export type BossId = 'cipher' | 'spider' | 'turrets' | 'omega' | 'abyss';
 export type MinionType = 'basic' | 'shooter' | 'shield' | 'rusher';
 
 export interface BossBulletRequest {
@@ -89,10 +89,10 @@ const BOSS_DEFS: BossDef[] = [
     minionTypes: ['rusher'], minionCount: 3, minionInterval: 4500,
   },
   {
-    id: 'void', name: 'VOID', width: 90, height: 90,
-    color: CONFIG.COLORS.BOSS_VOID, baseHp: 160, speed: 0, targetY: 60,
-    attacks: ['spiral', 'composite', 'radial', 'shockwave'],
-    minionTypes: ['basic', 'shooter'], minionCount: 4, minionInterval: 4000,
+    id: 'turrets', name: 'TURRET-CRUISER', width: 120, height: 80,
+    color: CONFIG.COLORS.BOSS_TURRET, baseHp: 200, speed: 1.2, targetY: 50,
+    attacks: ['fan', 'laser', 'shockwave', 'radial'],
+    minionTypes: ['shield', 'shooter'], minionCount: 3, minionInterval: 4000,
   },
   {
     id: 'omega', name: 'OMEGA', width: 110, height: 80,
@@ -146,7 +146,7 @@ export class BossManager {
       dying: false,
       deathTimer: 0,
       flashTimer: 0,
-      coreOpen: true,
+      coreOpen: def.id !== 'turrets',
       legPhase: 0,
       name: def.name,
       bossId: def.id,
@@ -223,11 +223,11 @@ export class BossManager {
           this.boss.legPhase += 1;
         }
         break;
-      case 'void':
-        if (this.boss.moveTimer > 3000) {
+      case 'turrets':
+        // Slow side-to-side cruiser drift — the outer turret ring does the work.
+        if (this.boss.moveTimer > 3600) {
           this.boss.moveTimer = 0;
-          this.boss.x = 30 + Math.random() * (canvasWidth - this.boss.width - 60);
-          this.boss.flashTimer = 300;
+          this.boss.targetX = canvasWidth / 2 - this.boss.width / 2 + (Math.random() - 0.5) * 160;
         }
         break;
       case 'omega':
@@ -397,8 +397,11 @@ export class BossManager {
   private getAvailableAttacks(def: BossDef): BossAttackType[] {
     if (!this.boss) return ['radial'];
     const phaseAttacks = def.attacks.filter(a => {
-      if (a === 'aimed_stream' || a === 'spiral' || a === 'laser') return this.boss!.phase >= 1;
+      if (a === 'aimed_stream' || a === 'spiral') return this.boss!.phase >= 1;
       if (a === 'composite') return this.boss!.phase >= 2;
+      // Laser sweeps unlock at phase 2 (the turret-cruiser's hull-laser phase,
+      // after the outer-ring assault) — never in the opener pattern.
+      if (a === 'laser') return this.boss!.phase >= 2;
       return true;
     });
     return phaseAttacks.length > 0 ? phaseAttacks : ['radial'];
@@ -499,6 +502,7 @@ export class BossManager {
   takeDamage(amount: number): boolean {
     if (!this.boss || !this.boss.active || this.boss.invulnerable || this.boss.dying || this.boss.entering) return false;
     if (this.boss.bossId === 'spider' && !this.boss.coreOpen) return false;
+    if (this.boss.bossId === 'turrets' && !this.boss.coreOpen) return false;
 
     this.boss.health -= amount;
     this.boss.flashTimer = 100;
@@ -518,9 +522,15 @@ export class BossManager {
 
     if (newPhase > this.boss.phase) {
       this.boss.phase = newPhase;
-      // Spider: belly-core opens in phases 1 and 3, closes during phase 2.
+      // Per-boss core exposure:
+      //  - spider: belly-core opens in phases 1 and 3, closes during phase 2.
+      //  - turrets: the turret-cruiser's core only exposes in phase C (the final
+      //    "hull breached" phase) — phases 1-2 are the outer-ring + hull-laser
+      //    assault where it is invulnerable.
       if (this.boss.bossId === 'spider') {
         this.boss.coreOpen = newPhase !== 2;
+      } else if (this.boss.bossId === 'turrets') {
+        this.boss.coreOpen = newPhase === 3;
       }
       this.boss.phaseTransitioning = true;
       this.boss.phaseTransitionTimer = 1500;

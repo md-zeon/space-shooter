@@ -220,7 +220,8 @@ export class GameEngine {
       this.enemies.spawnEnemy(
         cmd.type, cmd.x, cmd.y, cmd.speed,
         cmd.movementPattern, cmd.shootPattern,
-        cmd.formationId, cmd.offsetX, cmd.offsetY
+        cmd.formationId, cmd.offsetX, cmd.offsetY,
+        cmd.hp, cmd.aimShards
       );
     }
 
@@ -570,6 +571,17 @@ export class GameEngine {
                 this.score += 50;
                 this.particles.emitExplosion(minion.x + minion.width / 2, minion.y + minion.height / 2, 0.5);
                 this.audio.playExplosionSmall();
+                // Turret-Cruiser thesis: destroying a turret is also NOT safe —
+                // it bursts into 2 homing shards (the splinterer lesson, scaled).
+                if (boss.bossId === 'turrets') {
+                  const mx = minion.x + minion.width / 2;
+                  const my = minion.y + minion.height / 2;
+                  const pCX = this.player.x + this.player.width / 2;
+                  const pCY = this.player.y + this.player.height / 2;
+                  const base = Math.atan2(pCY - my, pCX - mx);
+                  this.bullets.acquireAngled(mx, my, base - 0.3, 5, 'aimed');
+                  this.bullets.acquireAngled(mx, my, base + 0.3, 5, 'aimed');
+                }
               }
               break;
             }
@@ -677,7 +689,7 @@ export class GameEngine {
     }
   }
 
-  private onEnemyKilled(enemy: { x: number; y: number; width: number; height: number; health?: number; type?: string; active?: boolean }) {
+  private onEnemyKilled(enemy: { x: number; y: number; width: number; height: number; health?: number; type?: string; active?: boolean; aimShards?: boolean }) {
     if (enemy.active === false) return;
     enemy.active = false;
 
@@ -695,6 +707,31 @@ export class GameEngine {
     } else {
       this.audio.playExplosionSmall();
       this.particles.emitExplosion(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, 0.8);
+    }
+
+    // Splinterer: kills are NOT safe — death sprays 4 fast shrapnel shards.
+    // Once aiming is unlocked (later in decade 3) the shards home at the player,
+    // forcing kill-placement discipline. This intentionally breaks the decade-1
+    // "killing = safe" rule.
+    if (enemy.type === 'splinterer') {
+      const cx = enemy.x + enemy.width / 2;
+      const cy = enemy.y + enemy.height / 2;
+      const shardCount = 4;
+      const baseSpeed = 5.5;
+      const aimed = !!enemy.aimShards;
+      const playerCX = this.player.x + this.player.width / 2;
+      const playerCY = this.player.y + this.player.height / 2;
+      for (let i = 0; i < shardCount; i++) {
+        let angle: number;
+        if (aimed) {
+          const baseAngle = Math.atan2(playerCY - cy, playerCX - cx);
+          angle = baseAngle + (i - (shardCount - 1) / 2) * 0.42;
+        } else {
+          angle = (i / shardCount) * Math.PI * 2 + Math.random() * 0.2;
+        }
+        this.bullets.acquireAngled(cx, cy, angle, baseSpeed + Math.random() * 0.6, 'aimed');
+      }
+      this.audio.playExplosionSmall();
     }
 
     if (enemy.type === 'elite' && Math.random() < 0.4) {
@@ -1298,22 +1335,52 @@ export class GameEngine {
         break;
       }
 
-      case 'void': {
-        const radius = boss.width / 2;
+      case 'turrets': {
+        // Angled hull (cruiser) girdled by an outer turret ring. As turrets fall
+        // the ring visibly disassembles; the center core glows only when exposed.
+        const ringPct = boss.minions.length / Math.max(CONFIG.MAX_BOSS_MINIONS, 1);
+        const hullW = boss.width * 0.62;
+        const hullH = boss.height * 0.55;
         ctx.beginPath();
-        ctx.arc(cx, cy, radius * 0.9, 0, Math.PI * 2);
+        ctx.moveTo(cx - hullW / 2, cy - hullH / 2);
+        ctx.lineTo(cx - hullW * 0.2, boss.y + boss.height * 0.12);
+        ctx.lineTo(cx + hullW * 0.2, boss.y + boss.height * 0.12);
+        ctx.lineTo(cx + hullW / 2, cy - hullH / 2);
+        ctx.lineTo(cx + hullW * 0.3, boss.y + boss.height);
+        ctx.lineTo(cx - hullW * 0.3, boss.y + boss.height);
+        ctx.closePath();
         ctx.fill();
 
-        ctx.strokeStyle = '#9933FF';
+        // Outer turret ring — closes tighter as turrets are destroyed.
+        const ringR = boss.width * 0.46 * (0.6 + ringPct * 0.4);
+        ctx.strokeStyle = boss.color;
         ctx.lineWidth = 3;
         ctx.beginPath();
-        ctx.arc(cx, cy, radius * 0.6, boss.patternTimer * 0.002, boss.patternTimer * 0.002 + Math.PI * 1.5);
+        ctx.arc(cx, cy, ringR, boss.patternTimer * 0.001, boss.patternTimer * 0.001 + Math.PI * 1.6);
         ctx.stroke();
+        ctx.lineWidth = 1;
 
-        ctx.fillStyle = '#000000';
+        // Turret nubs riding the ring gap (the remaining ring "teeth").
+        ctx.fillStyle = '#FFAA00';
+        const teeth = Math.max(2, Math.round(ringPct * 8));
+        for (let i = 0; i < teeth; i++) {
+          const a = (i / teeth) * Math.PI * 2 + boss.patternTimer * 0.002;
+          const tx = cx + Math.cos(a) * ringR;
+          const ty = cy + Math.sin(a) * ringR;
+          ctx.beginPath();
+          ctx.arc(tx, ty, 3.5, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        // Central core — bright when exposed (vulnerable), dark when sealed.
+        const exposed = boss.coreOpen;
+        ctx.fillStyle = exposed ? CONFIG.COLORS.BOSS_TURRET_CORE : '#5A3A00';
+        ctx.shadowColor = exposed ? CONFIG.COLORS.BOSS_TURRET_CORE : 'transparent';
+        ctx.shadowBlur = exposed ? 16 : 0;
         ctx.beginPath();
-        ctx.arc(cx, cy, radius * 0.3, 0, Math.PI * 2);
+        ctx.arc(cx, cy, 8, 0, Math.PI * 2);
         ctx.fill();
+        ctx.shadowBlur = 0;
         break;
       }
 
@@ -1367,7 +1434,7 @@ export class GameEngine {
     ctx.fillStyle = boss.phase === 3 ? '#FF00FF' : boss.phase === 2 ? '#FF6600' : '#FFFFFF';
     ctx.shadowColor = ctx.fillStyle;
     ctx.shadowBlur = 12;
-    if (boss.bossId !== 'void' && boss.bossId !== 'spider') {
+    if (boss.bossId !== 'spider' && boss.bossId !== 'turrets') {
       ctx.beginPath();
       ctx.arc(cx, eyeY, boss.width * 0.08, 0, Math.PI * 2);
       ctx.fill();

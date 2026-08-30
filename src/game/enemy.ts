@@ -1,6 +1,6 @@
 import { CONFIG } from './config';
 
-export type EnemyType = 'basic' | 'advanced' | 'elite' | 'wall';
+export type EnemyType = 'basic' | 'advanced' | 'elite' | 'wall' | 'splinterer';
 
 export interface Enemy {
   x: number;
@@ -22,6 +22,7 @@ export interface Enemy {
   formationId: number;
   offsetX: number;
   offsetY: number;
+  aimShards: boolean;
 }
 
 export interface EnemyBulletRequest {
@@ -65,10 +66,13 @@ export class EnemyManager {
     shootPattern: string,
     formationId: number = -1,
     offsetX: number = 0,
-    offsetY: number = 0
+    offsetY: number = 0,
+    hp?: number,
+    aimShards: boolean = false
   ) {
     const isWall = type === 'wall';
-    const health = isWall ? 3 : type === 'elite' ? 4 : type === 'advanced' ? 2 : 1;
+    const isSplinterer = type === 'splinterer';
+    const health = hp ?? (isWall ? 3 : type === 'elite' ? 4 : type === 'advanced' ? 2 : isSplinterer ? 1 : 1);
     this.enemies.push({
       x, y,
       width: isWall ? 30 : type === 'elite' ? 35 : CONFIG.ENEMY_WIDTH,
@@ -88,6 +92,7 @@ export class EnemyManager {
       formationId,
       offsetX,
       offsetY,
+      aimShards,
     });
 
     if (formationId >= 0 && !this.formationOrigins.has(formationId)) {
@@ -477,6 +482,10 @@ export class EnemyManager {
           color = CONFIG.COLORS.ENEMY_WALL;
           shape = 'wall';
           break;
+        case 'splinterer':
+          color = CONFIG.COLORS.ENEMY_SPLINTERER;
+          shape = 'splinterer';
+          break;
       }
 
       ctx.fillStyle = color;
@@ -534,6 +543,27 @@ export class EnemyManager {
         ctx.arc(centerX, centerY, 5, 0, Math.PI * 2);
         ctx.fill();
         ctx.shadowBlur = 0;
+      } else if (shape === 'splinterer') {
+        // Spiky star/orb: fragile, ready to shatter and spray shards outward.
+        const points = 8;
+        const outerR = enemy.width * 0.55;
+        const innerR = enemy.width * 0.22;
+        ctx.beginPath();
+        for (let j = 0; j < points * 2; j++) {
+          const angle = (j / (points * 2)) * Math.PI * 2 - Math.PI / 2;
+          const r = j % 2 === 0 ? outerR : innerR;
+          const px = centerX + Math.cos(angle) * r;
+          const py = centerY + Math.sin(angle) * r;
+          if (j === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.fill();
+
+        ctx.fillStyle = '#FFFFFF';
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, 3, 0, Math.PI * 2);
+        ctx.fill();
       } else {
         const hw = enemy.width / 2;
         const hh = enemy.height / 2;

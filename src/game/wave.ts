@@ -11,6 +11,8 @@ export interface WaveGroup {
   shootPattern?: string;
   delay?: number;
   movementPattern?: string;
+  hp?: number;
+  aimShards?: boolean;
 }
 
 export interface Wave {
@@ -30,6 +32,8 @@ export interface SpawnCommand {
   formationId: number;
   offsetX: number;
   offsetY: number;
+  hp?: number;
+  aimShards?: boolean;
 }
 
 const FORMATION_POOL: FormationType[] = [
@@ -204,6 +208,7 @@ function generateFormation(
 
 function getMovementPattern(formation: FormationType, type: EnemyType): string {
   if (type === 'elite') return 'hover';
+  if (type === 'splinterer') return 'straight';
   switch (formation) {
     case 'line': return 'straight';
     case 'vshape': return 'straight';
@@ -218,6 +223,7 @@ function getMovementPattern(formation: FormationType, type: EnemyType): string {
 }
 
 function getShootPattern(type: EnemyType, difficulty: number): string {
+  if (type === 'splinterer') return 'none';
   if (difficulty <= 2) {
     return type === 'elite' ? 'spread3' : 'straight';
   }
@@ -381,6 +387,75 @@ export class WaveManager {
 
       // Wave 20 — BOSS: The Spider War Machine (BossManager handles it).
       { groups: [], isBossWave: true, isBossPrep: false },
+
+      // ===== Decade 3 (waves 21-30): Splinterer archetype =====
+      // New verb: kill placement & target choice — splinterers die into shrapnel,
+      // so killing is NOT automatically safe. D3 entry grammar: V-formations with
+      // a center anchor.
+
+      // Wave 21 — Air/recovery after boss 20: recap D2 walls lightly, reset.
+      { groups: [
+        { type: 'basic', formation: 'line', count: 5, movementPattern: 'swoop', shootPattern: 'none', delay: 0 },
+        { type: 'wall', formation: 'random', count: 1, movementPattern: 'wall', shootPattern: 'none', delay: 600 },
+        { type: 'advanced', formation: 'line', count: 3, movementPattern: 'straight', shootPattern: 'aimed', delay: 900 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 22 — First splinterer: death splits into 4 fast shards (cross).
+      { groups: [
+        { type: 'splinterer', formation: 'vshape', count: 3, movementPattern: 'straight', shootPattern: 'none', delay: 0 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 23 — Splinterers mixed with swarmers: choose what to pop where.
+      { groups: [
+        { type: 'splinterer', formation: 'vshape', count: 2, movementPattern: 'straight', shootPattern: 'none', delay: 0 },
+        { type: 'basic', formation: 'random', count: 6, movementPattern: 'swoop', shootPattern: 'none', delay: 400 },
+        { type: 'splinterer', formation: 'vshape', count: 2, movementPattern: 'straight', shootPattern: 'none', delay: 1200 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 24 — Splinterer + wall: wall forces you into the shrapnel cone.
+      { groups: [
+        { type: 'wall', formation: 'random', count: 1, movementPattern: 'wall', shootPattern: 'none', delay: 0 },
+        { type: 'splinterer', formation: 'vshape', count: 3, movementPattern: 'straight', shootPattern: 'none', delay: 500 },
+        { type: 'basic', formation: 'line', count: 4, movementPattern: 'swoop', shootPattern: 'none', delay: 900 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 25 — Aimed shards unlocked: splinterers' shards now home lightly at
+      // the player — kill AWAY from yourself / manage point-blank radius.
+      { groups: [
+        { type: 'splinterer', formation: 'vshape', count: 4, movementPattern: 'straight', shootPattern: 'none', aimShards: true, delay: 0 },
+        { type: 'splinterer', formation: 'vshape', count: 2, movementPattern: 'straight', shootPattern: 'none', aimShards: true, delay: 1000 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 26 — Chain of splinterers: killing one reveals the next (a ladder).
+      { groups: [
+        { type: 'splinterer', formation: 'vshape', count: 3, movementPattern: 'straight', shootPattern: 'none', aimShards: true, delay: 0 },
+        { type: 'splinterer', formation: 'vshape', count: 3, movementPattern: 'straight', shootPattern: 'none', aimShards: true, delay: 500 },
+        { type: 'splinterer', formation: 'vshape', count: 3, movementPattern: 'straight', shootPattern: 'none', aimShards: true, delay: 1000 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 27 — Splinterers + tanks + rushers together: multitask under splinters.
+      { groups: [
+        { type: 'splinterer', formation: 'vshape', count: 3, movementPattern: 'straight', shootPattern: 'none', aimShards: true, delay: 0 },
+        { type: 'advanced', formation: 'line', count: 3, movementPattern: 'straight', shootPattern: 'aimed', delay: 400 },
+        { type: 'elite', formation: 'random', count: 1, movementPattern: 'dash', shootPattern: 'spread5', delay: 900 },
+        { type: 'splinterer', formation: 'vshape', count: 2, movementPattern: 'straight', shootPattern: 'none', aimShards: true, delay: 1300 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 28 — Armored splinterer (2-stage): break the shell (2 HP), then it splits.
+      { groups: [
+        { type: 'splinterer', formation: 'vshape', count: 3, movementPattern: 'straight', shootPattern: 'none', aimShards: true, hp: 2, delay: 0 },
+        { type: 'wall', formation: 'random', count: 1, movementPattern: 'wall', shootPattern: 'none', delay: 500 },
+        { type: 'splinterer', formation: 'vshape', count: 2, movementPattern: 'straight', shootPattern: 'none', aimShards: true, delay: 1000 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 29 — Calm / pre-boss relief: light splinterer scatter, breathing room.
+      { groups: [
+        { type: 'basic', formation: 'line', count: 4, movementPattern: 'straight', shootPattern: 'none', delay: 0 },
+        { type: 'splinterer', formation: 'vshape', count: 2, movementPattern: 'straight', shootPattern: 'none', delay: 800 },
+      ], isBossWave: false, isBossPrep: true },
+
+      // Wave 30 — BOSS: The Turret-Cruiser (BossManager handles it).
+      { groups: [], isBossWave: true, isBossPrep: false },
     ];
 
     for (let i = 0; i < authored.length; i++) {
@@ -453,6 +528,8 @@ export class WaveManager {
           formationId,
           offsetX: positions[i].x - cx,
           offsetY: positions[i].y - cy,
+          hp: group.hp,
+          aimShards: group.aimShards,
         });
       }
     }
