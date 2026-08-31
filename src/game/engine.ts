@@ -33,6 +33,18 @@ export class GameEngine {
   private highScore: number = 0;
   private isNewHighScore: boolean = false;
 
+  // Meta-progression (persisted totals + selected ship skin)
+  private metaTotalScore: number = 0;
+  private metaEnemiesDestroyed: number = 0;
+  private metaBossesKilled: number = 0;
+  private shipSkin: number = 0;
+  // Run-scoped counters (shown on the game-over callout)
+  private runEnemiesDestroyed: number = 0;
+  private runBossesKilled: number = 0;
+
+  // Focus held via the on-screen button (Shift keyboard also focuses)
+  private focusButtonHeld: boolean = false;
+
   private lastTime: number = 0;
   private accumulator: number = 0;
   private animationId: number = 0;
@@ -60,6 +72,12 @@ export class GameEngine {
   private grazePulse: number = 0;
   private grazedBullets = new Set<Bullet>();
 
+  // Low-lives heartbeat (last-life tension cue)
+  private lowLifeTimer: number = 0;
+
+  // Laser charge cue (once at ~60%, again at full)
+  private laserChargeCue: number = 0;
+
   constructor() {
     this.input = new InputManager();
     this.bullets = new BulletPool();
@@ -86,6 +104,7 @@ export class GameEngine {
 
     this.loadHighScore();
     this.loadShootMode();
+    this.loadMeta();
     this.audio.startMenuMusic();
 
     this.lastTime = performance.now();
@@ -115,6 +134,12 @@ export class GameEngine {
   private fixedUpdate(deltaTime: number) {
     this.handleInput();
 
+    // Focus is held via the on-screen button OR the Shift keyboard key.
+    // (the player only exists once a run has started)
+    if (this.player) {
+      this.player.focusing = this.focusButtonHeld || this.input.isKeyDown('Shift');
+    }
+
     if (this.state === 'playing') {
       if (!this.particles.isHitstopped()) {
         this.updateWaveSpawning(deltaTime);
@@ -132,6 +157,7 @@ export class GameEngine {
         this.checkWaveAnnouncements();
         this.checkWarning();
         this.checkBossDefeat(deltaTime);
+        this.checkLowLife();
         if (this.waveAnnounceTimer > 0) {
           this.waveAnnounceTimer -= CONFIG.FIXED_DT * 1000;
         }
@@ -152,11 +178,32 @@ export class GameEngine {
       case 'menu':
         if (click) {
           this.audio.resume();
+          this.audio.playUIClick();
+          if (this.renderer.isHelpOpen()) {
+            // Any tap dismisses the help overlay.
+            this.renderer.setHelpOpen(false);
+            break;
+          }
+          if (this.renderer.isStatsOpen()) {
+            this.renderer.setStatsOpen(false);
+            break;
+          }
           const item = this.renderer.hitTestMenu(click.x, click.y);
-          if (item?.id === 'PLAY') this.startGame();
+          if (item?.id === 'PLAY' || item?.label === '▶  PLAY') this.startGame();
+          else if (item?.label === '◄') this.toggleShipSkin();
+          else if (item?.label === '►') this.toggleShipSkin();
+          else if (item?.label === 'SOUND ON' || item?.label === 'MUTED') this.toggleMute();
+          else if (item?.label === 'HELP') { this.audio.playUIConfirm(); this.renderer.setHelpOpen(true); }
+          else if (item?.label === 'STATS') this.toggleStatsOverlay();
         }
-        if (this.input.isKeyJustPressed(' ') || this.input.isKeyJustPressed('Enter')) {
-          this.startGame();
+        if (this.input.isKeyJustPressed(' ')) {
+          if (this.renderer.isHelpOpen()) { this.renderer.setHelpOpen(false); }
+          else if (this.renderer.isStatsOpen()) { this.renderer.setStatsOpen(false); }
+          else { this.audio.playUIConfirm(); this.startGame(); }
+        }
+        if (this.input.isKeyJustPressed('Escape')) {
+          if (this.renderer.isHelpOpen()) this.renderer.setHelpOpen(false);
+          else if (this.renderer.isStatsOpen()) this.renderer.setStatsOpen(false);
         }
         break;
 
@@ -164,11 +211,13 @@ export class GameEngine {
         if (click) {
           const { x, y, width, height } = this.pauseBtnBounds;
           if (this.renderer.hitTestPauseButton(click.x, click.y, x, y, width, height)) {
+            this.audio.playUIPause();
             this.state = 'paused';
             break;
           }
         }
         if (this.input.isKeyJustPressed('Escape') || this.input.consumeBackButton()) {
+          this.audio.playUIPause();
           this.state = 'paused';
         }
     if (this.input.isKeyJustPressed('b') || this.input.isKeyJustPressed('B')) {
@@ -184,26 +233,41 @@ export class GameEngine {
 
       case 'paused':
         if (click) {
+          this.audio.playUIClick();
           const item = this.renderer.hitTestMenu(click.x, click.y);
-          if (item?.id === 'RESUME') this.state = 'playing';
-          else if (item?.id === 'RESTART') this.startGame();
-          else if (item?.id === 'EXIT') { this.state = 'menu'; this.audio.startMenuMusic(); }
+          if (item?.id === 'RESUME') { this.audio.playUIConfirm(); this.state = 'playing'; }
+          else if (item?.id === 'RESTART') { this.audio.playUIConfirm(); this.startGame(); }
+          else if (item?.id === 'EXIT') { this.audio.playUIConfirm(); this.state = 'menu'; this.audio.startMenuMusic(); }
         }
-        if (this.input.isKeyJustPressed('Escape')) this.state = 'playing';
-        if (this.input.isKeyJustPressed(' ') || this.input.isKeyJustPressed('Enter')) this.state = 'playing';
+        if (this.input.isKeyJustPressed('Escape')) { this.audio.playUIPause(); this.state = 'playing'; }
+        if (this.input.isKeyJustPressed(' ') || this.input.isKeyJustPressed('Enter')) { this.audio.playUIConfirm(); this.state = 'playing'; }
         break;
 
       case 'gameover':
         if (click) {
+          this.audio.playUIClick();
           const item = this.renderer.hitTestMenu(click.x, click.y);
-          if (item?.id === 'RESTART') this.startGame();
-          else if (item?.id === 'EXIT') { this.state = 'menu'; this.audio.startMenuMusic(); }
+          if (item?.id === 'RESTART') { this.audio.playUIConfirm(); this.startGame(); }
+          else if (item?.id === 'EXIT') { this.audio.playUIConfirm(); this.state = 'menu'; this.audio.startMenuMusic(); }
         }
-        if (this.input.isKeyJustPressed(' ') || this.input.isKeyJustPressed('Enter')) this.startGame();
+        if (this.input.isKeyJustPressed(' ') || this.input.isKeyJustPressed('Enter')) { this.audio.playUIConfirm(); this.startGame(); }
         break;
     }
 
-    if (this.input.isKeyJustPressed('m')) this.audio.toggleMute();
+    if (this.input.isKeyJustPressed('m')) {
+      this.toggleMute();
+    }
+  }
+
+  private toggleMute() {
+    const muted = this.audio.toggleMute();
+    this.renderer.setSoundOn(!muted);
+    this.audio.playUIClick();
+  }
+
+  private toggleStatsOverlay() {
+    this.audio.playUIConfirm();
+    this.renderer.setStatsOpen(!this.renderer.isStatsOpen());
   }
 
   private updateWaveSpawning(deltaTime: number) {
@@ -506,6 +570,17 @@ export class GameEngine {
         CONFIG.LASER_CHARGE_TIME,
         this.player.laserCharge + deltaTime * 1000
       );
+      // Rising-charge cue: warn at ~60%, then again as it completes.
+      const ratio = this.player.laserCharge / CONFIG.LASER_CHARGE_TIME;
+      if (ratio >= 1 && this.laserChargeCue < 2) {
+        this.laserChargeCue = 2;
+        this.audio.playUIConfirm();
+      } else if (ratio >= 0.6 && this.laserChargeCue < 1) {
+        this.laserChargeCue = 1;
+        this.audio.playLaserCharge();
+      }
+    } else if (this.laserChargeCue !== 0) {
+      this.laserChargeCue = 0;
     }
   }
 
@@ -753,6 +828,8 @@ export class GameEngine {
     if (enemy.active === false) return;
     enemy.active = false;
 
+    this.metaEnemiesDestroyed++;
+    this.runEnemiesDestroyed++;
     const waveNumber = this.waves.getWaveNumber();
     const level = Math.floor(waveNumber / 5) + 1;
 
@@ -825,6 +902,9 @@ export class GameEngine {
     this.boss.clear();
     this.bullets.clear();
 
+    this.metaBossesKilled++;
+    this.runBossesKilled++;
+
     const waveNumber = this.waves.getWaveNumber();
     const level = Math.floor(waveNumber / 5) + 1;
     this.score += CONFIG.SCORE_BONUS_BOSS * level;
@@ -875,6 +955,33 @@ export class GameEngine {
   }
 
   private onPlayerHit() {
+    // Armor pods (Blast'N Bounty model): the outermost pod absorbs the hit
+    // instead of losing a life. Brief hit-stop + reposition so the player can
+    // re-center their thumb after a thumb-slip. When pods are out, next hit
+    // costs a life (below).
+    if (this.player.armor > 0) {
+      this.player.armor--;
+      this.particles.addShake(8);
+      this.particles.addHitstop(6);
+      this.particles.flash('#E5E5FF', 0.3);
+      this.audio.playDamage();
+      this.player.isInvincible = true;
+      this.player.invincibleTimer = Math.max(this.player.invincibleTimer, 900);
+      return;
+    }
+
+    // Deathbomb / auto-bomb assist: if a bomb is available, consume one on hit
+    // to cancel the damage instead of losing a life. Generous window suits
+    // touch play (you can't mash as fast as an arcade button).
+    if (this.player.bombs > 0) {
+      this.player.bombs--;
+      this.activateBomb();
+      this.audio.playBomb();
+      this.player.isInvincible = true;
+      this.player.invincibleTimer = CONFIG.INVINCIBLE_DURATION;
+      return;
+    }
+
     this.player.lives--;
     this.chain = 0;
     this.player.isInvincible = true;
@@ -895,6 +1002,23 @@ export class GameEngine {
         15, CONFIG.COLORS.PLAYER,
         { speed: 4, size: 3 }
       );
+    }
+  }
+
+  /**
+   * Last-life tension heartbeat: while the player is on their final life,
+   * play a low pulse roughly every second. The timer is a wall-clock countdown
+   * so the cue matches the stress of being one hit from game over.
+   */
+  private checkLowLife() {
+    if (this.player && this.player.lives === 1) {
+      this.lowLifeTimer -= CONFIG.FIXED_DT * 1000;
+      if (this.lowLifeTimer <= 0) {
+        this.audio.playLowHealth();
+        this.lowLifeTimer = 1100;
+      }
+    } else {
+      this.lowLifeTimer = 0;
     }
   }
 
@@ -927,6 +1051,12 @@ export class GameEngine {
       case 'narrow':
         this.player.narrowTimer = CONFIG.POWERUP_NARROW_DURATION;
         break;
+      case 'armor':
+        // Armor pod: +1 hit buffer (Blast'N Bounty model). Freezes bullets.
+        if (this.player.armor < this.player.maxArmor) {
+          this.player.armor++;
+        }
+        break;
     }
   }
 
@@ -934,8 +1064,10 @@ export class GameEngine {
     const announcement = this.waves.getWaveAnnouncement();
     if (announcement) {
       this.waveAnnounceTimer = 2000;
-      if (!announcement.isBoss) {
-        this.audio.playWaveComplete();
+      if (announcement.isBoss) {
+        this.audio.playBossIncoming();
+      } else {
+        this.audio.playWaveIncoming();
       }
     }
   }
@@ -966,6 +1098,11 @@ export class GameEngine {
     this.grazeCount = 0;
     this.grazePulse = 0;
     this.grazedBullets.clear();
+    this.lowLifeTimer = 0;
+    this.laserChargeCue = 0;
+    this.runEnemiesDestroyed = 0;
+    this.runBossesKilled = 0;
+    this.focusButtonHeld = false;
     this.player = createPlayer(CONFIG.WIDTH, CONFIG.HEIGHT);
     this.bullets.clear();
     this.enemies.clear();
@@ -974,7 +1111,27 @@ export class GameEngine {
     this.waves.reset();
     this.boss.clear();
     this.audio.resume();
+    this.requestFullscreen();
     this.waves.startNextWave(CONFIG.WIDTH);
+  }
+
+  /**
+   * Attempt true fullscreen on the Play gesture (desktop/Android browsers).
+   * The fullscreen API requires a direct user gesture; this is called from the
+   * user's Play tap/keypress. It is a harmless no-op on iPhone (no Fullscreen
+   * API) where PWA standalone already gives the immersive view.
+   */
+  private requestFullscreen() {
+    try {
+      const el = this.canvas;
+      if (!el) return;
+      const req = el.requestFullscreen?.call(el) ||
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (el as any).webkitRequestFullscreen?.call(el);
+      if (req && typeof req.catch === 'function') req.catch(() => {});
+    } catch {
+      // ignore — fullscreen is best-effort
+    }
   }
 
   private gameOver() {
@@ -985,7 +1142,13 @@ export class GameEngine {
       this.highScore = this.score;
       this.isNewHighScore = true;
       this.saveHighScore();
+      this.audio.playHighScore();
     }
+
+    // Accumulate lifetime totals; if a just-unlocked skin became available the
+    // menu will reflect it on the next load. Persist here (once per run).
+    this.metaTotalScore += this.score;
+    this.saveMeta();
   }
 
   private loadHighScore() {
@@ -1014,6 +1177,54 @@ export class GameEngine {
     } catch {}
   }
 
+  /* ---- Meta-progression persistence (totals + selected ship skin) ---- */
+
+  private loadMeta() {
+    try {
+      const raw = localStorage.getItem('space-shooter-meta');
+      if (!raw) return;
+      const data = JSON.parse(raw) as {
+        totalScore?: number;
+        enemiesDestroyed?: number;
+        bossesKilled?: number;
+        shipSkin?: number;
+      };
+      this.metaTotalScore = data.totalScore ?? 0;
+      this.metaEnemiesDestroyed = data.enemiesDestroyed ?? 0;
+      this.metaBossesKilled = data.bossesKilled ?? 0;
+      const skin = data.shipSkin ?? 0;
+      // Never select a skin that isn't yet unlocked.
+      this.shipSkin = this.isSkinUnlocked(skin) ? skin : 0;
+    } catch {}
+  }
+
+  private saveMeta() {
+    try {
+      localStorage.setItem('space-shooter-meta', JSON.stringify({
+        totalScore: this.metaTotalScore,
+        enemiesDestroyed: this.metaEnemiesDestroyed,
+        bossesKilled: this.metaBossesKilled,
+        shipSkin: this.shipSkin,
+      }));
+    } catch {}
+  }
+
+  /** The alternate ship skin unlocks once a best run crosses the milestone. */
+  private isSkinUnlocked(skin: number): boolean {
+    if (skin <= 0) return true;
+    return this.highScore >= CONFIG.SHIP_UNLOCK_SCORE;
+  }
+
+  /** Cycle the active ship skin; returns the newly selected skin. */
+  private toggleShipSkin(): number {
+    const next = (this.shipSkin + 1) % CONFIG.SHIP_SKIN_COUNT;
+    if (this.isSkinUnlocked(next)) {
+      this.shipSkin = next;
+      this.saveMeta();
+    }
+    return this.shipSkin;
+  }
+
   private render() {
     if (!this.ctx) return;
     const ctx = this.ctx;
@@ -1029,7 +1240,14 @@ export class GameEngine {
 
     switch (this.state) {
       case 'menu':
-        this.renderer.renderMainMenu(ctx, this.highScore);
+        this.renderer.renderMainMenu(ctx, this.highScore, {
+          totalScore: this.metaTotalScore,
+          enemiesDestroyed: this.metaEnemiesDestroyed,
+          bossesKilled: this.metaBossesKilled,
+          shipSkin: this.shipSkin,
+          shipSkinUnlocked: this.isSkinUnlocked(1),
+          shipUnlockScore: CONFIG.SHIP_UNLOCK_SCORE,
+        }, performance.now());
         break;
 
       case 'playing':
@@ -1043,7 +1261,10 @@ export class GameEngine {
 
       case 'gameover':
         this.renderGameFrame(ctx);
-        this.renderer.renderGameOver(ctx, this.score, this.isNewHighScore);
+        this.renderer.renderGameOver(ctx, this.score, this.isNewHighScore, {
+          enemiesDestroyed: this.runEnemiesDestroyed,
+          bossesKilled: this.runBossesKilled,
+        });
         break;
     }
 
@@ -1150,7 +1371,7 @@ export class GameEngine {
     }
     ctx.restore();
 
-    renderPlayer(ctx, this.player, performance.now());
+    renderPlayer(ctx, this.player, performance.now(), this.shipSkin);
 
     if (this.grazePulse > 0) {
       ctx.save();
@@ -1218,7 +1439,8 @@ export class GameEngine {
       this.input.getShootMode(), this.player.powerLevel,
       this.player.bombs, this.chain,
       this.player.laserCharge, this.player.laserActive,
-      this.player.narrowTimer, this.grazeCount
+      this.player.narrowTimer, this.grazeCount,
+      this.player.armor
     );
 
     const bossState = this.boss.getBoss();
@@ -2095,6 +2317,15 @@ export class GameEngine {
 
   pressSpecial() {
     if (this.state === 'playing') this.activateLaser();
+  }
+
+  /** Hold-to-focus: slow movement + visible hitbox (Touhou-style). */
+  setFocus(on: boolean) {
+    this.focusButtonHeld = on;
+  }
+
+  getFocus(): boolean {
+    return this.player.focusing;
   }
 
   toggleShootMode(): 'auto' | 'manual' {

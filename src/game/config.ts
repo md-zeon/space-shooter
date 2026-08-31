@@ -12,11 +12,17 @@ export const CONFIG = {
   MAX_POWER_LEVEL: 5,
   MAX_LIVES: 5,
   BOMB_COUNT: 3,
+  PLAYER_MAX_ARMOR: 2,
+  FOCUS_SPEED_MULT: 0.45,
   BOMB_DURATION: 1500,
   BOMB_RADIUS: 350,
 
   // Settings
   SHOOT_MODE: 'auto' as 'auto' | 'manual',
+
+  // Meta-progression
+  SHIP_UNLOCK_SCORE: 100000,
+  SHIP_SKIN_COUNT: 2,
 
   // Bullets
   BULLET_SPEED: 10,
@@ -77,6 +83,9 @@ export const CONFIG = {
     PLAYER: '#00FFFF',
     PLAYER_GLOW: 'rgba(0, 255, 255, 0.3)',
     PLAYER_TILT: '#0099CC',
+    PLAYER_SKIN_BODY: '#B300FF',
+    PLAYER_SKIN_TILT: '#6600CC',
+    PLAYER_SKIN_BULLET: '#FF66FF',
     ENEMY: '#FF0044',
     ENEMY_ADVANCED: '#FF6600',
     ENEMY_ELITE: '#B300FF',
@@ -118,6 +127,7 @@ export const CONFIG = {
     POWERUP_SCORE: '#FFD600',
     POWERUP_BOMB: '#FF8C00',
     POWERUP_NARROW: '#4488FF',
+    POWERUP_ARMOR: '#B06CFF',
     LASER_BEAM: '#00FFFF',
     BOMB_FLASH: 'rgba(255, 255, 255, 0.8)',
     BACKGROUND: '#050A1A',

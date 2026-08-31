@@ -21,6 +21,9 @@ export interface Player {
   laserTimer: number;
   laserDmgTimer: number;
   narrowTimer: number;
+  focusing: boolean;
+  armor: number;
+  maxArmor: number;
 }
 
 export function createPlayer(canvasWidth: number, canvasHeight: number): Player {
@@ -45,6 +48,9 @@ export function createPlayer(canvasWidth: number, canvasHeight: number): Player 
     laserTimer: 0,
     laserDmgTimer: 0,
     narrowTimer: 0,
+    focusing: false,
+    armor: 0,
+    maxArmor: CONFIG.PLAYER_MAX_ARMOR,
   };
 }
 
@@ -55,11 +61,12 @@ export function updatePlayer(
   canvasWidth: number,
   canvasHeight: number
 ) {
-  const speed = player.speed * deltaTime * 60;
+  const speed = player.speed * deltaTime * 60 * (player.focusing ? CONFIG.FOCUS_SPEED_MULT : 1);
 
   if (input.touchTarget) {
-    // Direct position follow with smoothing
-    const smoothing = 0.25;
+    // Direct position follow with smoothing. Focus slows the pursuit so the
+    // player gets fine-grained thumb control through dense lanes.
+    const smoothing = player.focusing ? 0.10 : 0.25;
     const targetX = input.touchTarget.x - player.width / 2;
     const targetY = input.touchTarget.y - player.height / 2;
     player.x += (targetX - player.x) * smoothing;
@@ -98,8 +105,13 @@ export function updatePlayer(
   }
 }
 
-export function renderPlayer(ctx: CanvasRenderingContext2D, player: Player, time: number) {
+export function renderPlayer(ctx: CanvasRenderingContext2D, player: Player, time: number, skin: number = 0) {
   if (player.isInvincible && Math.floor(time / 100) % 2 === 0) return;
+
+  // Alternate skin (index 1) re-colors the hull/wings/accents (meta unlock).
+  const bodyColor = skin === 1 ? CONFIG.COLORS.PLAYER_SKIN_BODY : CONFIG.COLORS.PLAYER;
+  const tiltColor = skin === 1 ? CONFIG.COLORS.PLAYER_SKIN_TILT : CONFIG.COLORS.PLAYER_TILT;
+  const bulletColor = skin === 1 ? CONFIG.COLORS.PLAYER_SKIN_BULLET : CONFIG.COLORS.BULLET_PLAYER;
 
   const cx = player.x + player.width / 2;
   const cy = player.y + player.height / 2;
@@ -109,7 +121,7 @@ export function renderPlayer(ctx: CanvasRenderingContext2D, player: Player, time
 
   // Shield bubble
   if (player.isInvincible && player.invincibleTimer > CONFIG.INVINCIBLE_DURATION * 0.3) {
-    ctx.strokeStyle = CONFIG.COLORS.PLAYER;
+    ctx.strokeStyle = bodyColor;
     ctx.globalAlpha = 0.2 + Math.sin(time * 0.01) * 0.1;
     ctx.lineWidth = 2;
     ctx.beginPath();
@@ -123,8 +135,8 @@ export function renderPlayer(ctx: CanvasRenderingContext2D, player: Player, time
   const exhaustAlpha = 0.5 + Math.sin(player.thrusterPhase * 1.5) * 0.2;
 
   ctx.globalAlpha = exhaustAlpha;
-  ctx.fillStyle = CONFIG.COLORS.BULLET_PLAYER;
-  ctx.shadowColor = CONFIG.COLORS.BULLET_PLAYER;
+  ctx.fillStyle = bulletColor;
+  ctx.shadowColor = bulletColor;
   ctx.shadowBlur = 8;
 
   // Left exhaust
@@ -147,13 +159,13 @@ export function renderPlayer(ctx: CanvasRenderingContext2D, player: Player, time
   ctx.shadowBlur = 0;
 
   // Ship body
-  ctx.shadowColor = CONFIG.COLORS.PLAYER;
+  ctx.shadowColor = bodyColor;
   ctx.shadowBlur = 20;
 
   const tiltOffset = tilt * 4;
 
   // Main fuselage
-  ctx.fillStyle = CONFIG.COLORS.PLAYER;
+  ctx.fillStyle = bodyColor;
   ctx.beginPath();
   ctx.moveTo(cx + tiltOffset, player.y);
   ctx.lineTo(player.x + player.width + tiltOffset * 0.5, player.y + player.height * 0.85);
@@ -163,7 +175,7 @@ export function renderPlayer(ctx: CanvasRenderingContext2D, player: Player, time
   ctx.fill();
 
   // Wings
-  ctx.fillStyle = CONFIG.COLORS.PLAYER_TILT;
+  ctx.fillStyle = tiltColor;
   ctx.beginPath();
   ctx.moveTo(cx - 2 + tiltOffset * 0.5, player.y + player.height * 0.4);
   ctx.lineTo(player.x - 5 + tiltOffset * 0.3, player.y + player.height);
@@ -186,7 +198,7 @@ export function renderPlayer(ctx: CanvasRenderingContext2D, player: Player, time
   ctx.fill();
 
   // Wing accents
-  ctx.strokeStyle = '#00FFFF';
+  ctx.strokeStyle = tiltColor;
   ctx.lineWidth = 1;
   ctx.globalAlpha = 0.6;
   ctx.beginPath();
@@ -200,5 +212,24 @@ export function renderPlayer(ctx: CanvasRenderingContext2D, player: Player, time
 
   ctx.globalAlpha = 1;
   ctx.shadowBlur = 0;
+
+  // Focus mode: reveal the tiny hitbox core at the ship center (Touhou-style).
+  if (player.focusing) {
+    const hx = cx + tiltOffset * 0.8;
+    const hy = cy - 2;
+    ctx.fillStyle = '#FF0000';
+    ctx.shadowColor = '#FF0000';
+    ctx.shadowBlur = 6;
+    ctx.beginPath();
+    ctx.arc(hx, hy, 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.shadowBlur = 0;
+    ctx.strokeStyle = '#FFFFFF';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(hx, hy, 5, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
   ctx.restore();
 }

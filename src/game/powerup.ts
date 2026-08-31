@@ -1,6 +1,6 @@
 import { CONFIG } from './config';
 
-export type PowerUpType = 'shield' | 'weapon' | 'health' | 'score' | 'bomb' | 'narrow';
+export type PowerUpType = 'shield' | 'weapon' | 'health' | 'score' | 'bomb' | 'narrow' | 'armor';
 
 export interface PowerUp {
   x: number;
@@ -38,12 +38,13 @@ export class PowerUpManager {
   spawn(canvasWidth: number) {
     const roll = Math.random();
     let type: PowerUpType;
-    if (roll < 0.30) type = 'weapon';
-    else if (roll < 0.48) type = 'score';
-    else if (roll < 0.63) type = 'shield';
-    else if (roll < 0.78) type = 'health';
-    else if (roll < 0.90) type = 'bomb';
-    else type = 'narrow';
+    if (roll < 0.28) type = 'weapon';
+    else if (roll < 0.45) type = 'score';
+    else if (roll < 0.58) type = 'shield';
+    else if (roll < 0.70) type = 'health';
+    else if (roll < 0.80) type = 'bomb';
+    else if (roll < 0.92) type = 'narrow';
+    else type = 'armor';
 
     this.powerUps.push({
       x: 30 + Math.random() * (canvasWidth - 60),
@@ -87,6 +88,7 @@ export class PowerUpManager {
         case 'score': color = CONFIG.COLORS.POWERUP_SCORE; label = '$'; break;
         case 'bomb': color = CONFIG.COLORS.POWERUP_BOMB; label = 'B'; break;
         case 'narrow': color = CONFIG.COLORS.POWERUP_NARROW; label = 'N'; break;
+        case 'armor': color = CONFIG.COLORS.POWERUP_ARMOR; label = 'A'; break;
       }
 
       const pulse = 1 + Math.sin(powerUp.pulsePhase) * 0.1;

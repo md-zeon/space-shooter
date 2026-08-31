@@ -89,8 +89,10 @@ export class AudioManager {
   }
 
   playShoot() {
-    this.playTone(880, 0.1, 'square', 0.2);
-    this.playTone(1320, 0.05, 'square', 0.1);
+    // Slight random pitch so rapid fire doesn't become a monotone buzzsaw.
+    const p = 1 + (Math.random() * 0.1 - 0.05);
+    this.playTone(880 * p, 0.1, 'square', 0.2);
+    this.playTone(1320 * p, 0.05, 'square', 0.1);
   }
 
   playExplosion() {
@@ -156,7 +158,69 @@ export class AudioManager {
   }
 
   playEnemyHit() {
-    this.playTone(400, 0.05, 'square', 0.1);
+    // Varied pitch so a packed screen of hits reads as layered, not flat.
+    const p = 1 + (Math.random() * 0.3 - 0.15);
+    this.playTone(400 * p, 0.05, 'square', 0.1);
+  }
+
+  /* ------------------------------------------------------------------ *
+   * UI / shell / state cues (added for the gameplay UI/UX polish pass)
+   * ------------------------------------------------------------------ */
+
+  /** Soft click for UI buttons (menu, pause, toggles). */
+  playUIClick() {
+    this.playTone(760, 0.06, 'square', 0.12);
+    this.playTone(1140, 0.05, 'square', 0.08, 0.03);
+  }
+
+  /** Quieter tick for UI hover/rollover. */
+  playUIHover() {
+    this.playTone(620, 0.04, 'sine', 0.06);
+  }
+
+  /** Pause / resume blip. */
+  playUIPause() {
+    this.playTone(880, 0.07, 'square', 0.14);
+    this.playTone(660, 0.09, 'square', 0.12, 0.06);
+  }
+
+  /** Rising fanfare when a new high score is set. */
+  playHighScore() {
+    const notes = [523.25, 659.25, 783.99, 1046.5, 1318.5];
+    notes.forEach((n, i) => this.playTone(n, 0.14, 'square', 0.18, i * 0.09));
+    this.playTone(1318.5, 0.4, 'sine', 0.2, notes.length * 0.09);
+  }
+
+  /** Announcement cue as a new wave rolls in. */
+  playWaveIncoming() {
+    this.playTone(392, 0.12, 'square', 0.14);
+    this.playTone(523.25, 0.16, 'square', 0.16, 0.09);
+  }
+
+  /** Melancholy two-tone for an incoming boss wave. */
+  playBossIncoming() {
+    this.playTone(220, 0.25, 'sawtooth', 0.18);
+    this.playTone(174.61, 0.35, 'sawtooth', 0.18, 0.18);
+    this.playTone(110, 0.5, 'sine', 0.16, 0.36);
+  }
+
+  /** Low, tense pulse for critical health. */
+  playLowHealth() {
+    this.playTone(140, 0.12, 'sine', 0.2);
+    this.playTone(110, 0.14, 'sine', 0.16, 0.15);
+  }
+
+  /** Metallic scrape that ramps up as the special laser charges. */
+  playLaserCharge() {
+    this.playTone(220, 0.3, 'sawtooth', 0.12);
+    this.playTone(330, 0.3, 'sawtooth', 0.1, 0.05);
+    this.playTone(440, 0.35, 'sawtooth', 0.08, 0.12);
+  }
+
+  /** A crisp hit for menu option selection confirm. */
+  playUIConfirm() {
+    this.playTone(660, 0.07, 'square', 0.14);
+    this.playTone(990, 0.1, 'square', 0.14, 0.05);
   }
 
   toggleMute() {
