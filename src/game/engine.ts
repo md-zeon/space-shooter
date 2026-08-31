@@ -264,7 +264,51 @@ export class GameEngine {
       this.player.y + this.player.height / 2
     );
 
+    this.applyGravityPull(deltaTime);
+
     if (this.input.isShootingActive()) this.shoot();
+  }
+
+  /**
+   * D7 gravity: every active attractor / gravity turret pulls the ship toward
+   * it with an inverse-distance falloff. The player must COUNTER-DRIFT — the
+   * field bends their controls while a source lives, which is the decade's
+   * "movement economy under a field effect" verb.
+   */
+  private applyGravityPull(deltaTime: number) {
+    if (!this.player || this.player.isInvincible) return;
+    const dt = deltaTime * 60;
+
+    const px = this.player.x + this.player.width / 2;
+    const py = this.player.y + this.player.height / 2;
+    let pullX = 0;
+    let pullY = 0;
+
+    const sources = this.enemies.getGravitySources();
+
+    if (this.boss && this.boss.isBossActive()) {
+      for (const m of this.boss.getGravitySources()) sources.push(m);
+    }
+
+    for (const s of sources) {
+      if (s.hidden) continue;
+      const dx = s.x - px;
+      const dy = s.y - py;
+      const dist2 = dx * dx + dy * dy;
+      if (dist2 > s.radius * s.radius || dist2 < 1) continue;
+      const dist = Math.sqrt(dist2);
+      const falloff = 1 - dist / s.radius;
+      const pull = s.strength * falloff * falloff * 2.2 * dt;
+      pullX += (dx / dist) * pull;
+      pullY += (dy / dist) * pull;
+    }
+
+    if (pullX !== 0 || pullY !== 0) {
+      this.player.x += pullX;
+      this.player.y += pullY;
+      this.player.x = Math.max(0, Math.min(CONFIG.WIDTH - this.player.width, this.player.x));
+      this.player.y = Math.max(0, Math.min(CONFIG.HEIGHT - this.player.height, this.player.y));
+    }
   }
 
   private shoot() {
@@ -1320,6 +1364,45 @@ export class GameEngine {
           ctx.arc(cx, cy, 2, 0, Math.PI * 2);
           ctx.fill();
           break;
+
+        case 'gturret':
+          // Gravity-anchored turret: an armored turret that PULLS the ship while
+          // it fires. Its halo shows the pull radius — every one bends your drift.
+          ctx.fillStyle = CONFIG.COLORS.BOSS_FORTRESS;
+          ctx.shadowColor = CONFIG.COLORS.BOSS_FORTRESS;
+          ctx.shadowBlur = 10;
+          ctx.beginPath();
+          ctx.moveTo(cx, m.y + m.height);
+          ctx.lineTo(m.x + m.width, m.y + m.height * 0.3);
+          ctx.lineTo(m.x, m.y + m.height * 0.3);
+          ctx.closePath();
+          ctx.fill();
+          ctx.fillStyle = '#FF5522';
+          ctx.shadowColor = '#FF5522';
+          ctx.beginPath();
+          ctx.arc(cx, m.y + m.height * 0.25, 3, 0, Math.PI * 2);
+          ctx.fill();
+          // Pull-radius halo.
+          ctx.strokeStyle = CONFIG.COLORS.BOSS_FORTRESS;
+          ctx.lineWidth = 1;
+          ctx.globalAlpha = 0.2;
+          ctx.beginPath();
+          ctx.arc(cx, cy, m.gravityRadius, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+          break;
+
+        case 'slot':
+          // Fortress slot weak-point: a bright notch riding the bastion face.
+          // Destroy all three, and the core opens — but they slide along the face.
+          ctx.fillStyle = CONFIG.COLORS.BOSS_FORTRESS_SLOT;
+          ctx.shadowColor = CONFIG.COLORS.BOSS_FORTRESS_SLOT;
+          ctx.shadowBlur = 14;
+          ctx.fillRect(cx - m.width / 2, cy - m.height / 2, m.width, m.height);
+          ctx.fillStyle = '#FFFFFF';
+          ctx.shadowBlur = 10;
+          ctx.fillRect(cx - 4, cy - 10, 8, 20);
+          break;
       }
 
       if (m.maxHealth > 1) {
@@ -1690,13 +1773,73 @@ export class GameEngine {
         }
         break;
       }
+
+      case 'fortress': {
+        // Full-width bastion: a crenellated wall face with SLOT notches where the
+        // exposed weak points ride. While any slot is up the core stays sealed.
+        ctx.fillStyle = boss.color;
+        ctx.shadowColor = boss.color;
+        ctx.shadowBlur = 16;
+        ctx.fillRect(boss.x, cy - 14, boss.width, boss.height);
+
+        // Crenellations along the top.
+        const teeth = 12;
+        const toothW = boss.width / teeth;
+        for (let i = 0; i < teeth; i++) {
+          ctx.fillStyle = boss.color;
+          ctx.fillRect(boss.x + i * toothW, boss.y, toothW * 0.6, 14);
+        }
+
+        // Armor seams (read the phases as battlement damage).
+        ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+        ctx.lineWidth = 1;
+        for (let i = 1; i < teeth; i++) {
+          const sx = boss.x + i * toothW;
+          ctx.beginPath();
+          ctx.moveTo(sx, boss.y + 14);
+          ctx.lineTo(sx, cy + 14);
+          ctx.stroke();
+        }
+
+        // Muzzle strip: light port windows along the face.
+        ctx.fillStyle = 'rgba(255,80,40,0.5)';
+        for (let i = 0; i < 6; i++) {
+          const lx = boss.x + boss.width * (0.12 + i * 0.15);
+          ctx.fillRect(lx, cy - 2, 8, 4);
+        }
+
+        // Core: sealed unless every slot is down (slot weak-points killed).
+        if (boss.coreOpen) {
+          const coreColor = boss.phase >= 3 ? '#FF4433' : boss.phase === 2 ? '#FFAA00' : '#FF5522';
+          ctx.fillStyle = coreColor;
+          ctx.shadowColor = coreColor;
+          ctx.shadowBlur = 26;
+          ctx.beginPath();
+          ctx.arc(cx, cy, 14, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#FFFFFF';
+          ctx.beginPath();
+          ctx.arc(cx, cy, 5, 0, Math.PI * 2);
+          ctx.fill();
+        } else {
+          const pulse = (Math.sin(boss.patternTimer * 0.05) + 1) / 2;
+          ctx.strokeStyle = CONFIG.COLORS.BOSS_FORTRESS_SLOT;
+          ctx.globalAlpha = 0.15 + pulse * 0.35;
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(cx, cy, 18 + pulse * 4, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+        }
+        break;
+      }
     }
 
     const eyeY = boss.y + boss.height * 0.35;
     ctx.fillStyle = boss.phase === 3 ? '#FF00FF' : boss.phase === 2 ? '#FF6600' : '#FFFFFF';
     ctx.shadowColor = ctx.fillStyle;
     ctx.shadowBlur = 12;
-    if (boss.bossId !== 'spider' && boss.bossId !== 'turrets' && boss.bossId !== 'statue' && boss.bossId !== 'shell') {
+    if (boss.bossId !== 'spider' && boss.bossId !== 'turrets' && boss.bossId !== 'statue' && boss.bossId !== 'shell' && boss.bossId !== 'fortress') {
       ctx.beginPath();
       ctx.arc(cx, eyeY, boss.width * 0.08, 0, Math.PI * 2);
       ctx.fill();

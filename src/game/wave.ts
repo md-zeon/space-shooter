@@ -223,6 +223,7 @@ function getMovementPattern(formation: FormationType, type: EnemyType): string {
   if (type === 'homer' || type === 'mirror' || type === 'mirrorcopy') return 'homing';
   if (type === 'healer' || type === 'leader') return 'support';
   if (type === 'teleporter') return 'teleporter';
+  if (type === 'attractor') return 'attractor';
   switch (formation) {
     case 'line': return 'straight';
     case 'vshape': return 'straight';
@@ -239,6 +240,7 @@ function getMovementPattern(formation: FormationType, type: EnemyType): string {
 function getShootPattern(type: EnemyType, difficulty: number): string {
   if (type === 'splinterer') return 'none';
   if (type === 'teleporter') return 'none';
+  if (type === 'attractor') return 'none';
   if (type === 'healer') return 'none';
   if (type === 'leader') return difficulty >= 6 ? 'aimed' : 'spread3';
   if (difficulty <= 2) {
@@ -716,6 +718,85 @@ export class WaveManager {
       ], isBossWave: false, isBossPrep: true },
 
       // Wave 60 — BOSS: The Shell -> Inner Core (BossManager handles it).
+      { groups: [], isBossWave: true, isBossPrep: false },
+
+      // ===== Decade 7 (waves 61-70): Gravity / Attractor =====
+      // The new verb is MOVEMENT ECONOMY UNDER A FIELD: a slow Attractor mass
+      // pulls the ship toward it while it lives, bending the player's controls.
+      // D7 signature entry grammar: field-assisted entrances (enemies arrive
+      // WHILE the gravity field is already on).
+
+      // Wave 61 — Air/recovery: re-presents earlier archetypes, NO gravity.
+      // Decade rule: the air-wave after a boss stays clean.
+      { groups: [
+        { type: 'basic', formation: 'line', count: 5, movementPattern: 'swoop', shootPattern: 'none', delay: 0 },
+        { type: 'wall', formation: 'random', count: 1, movementPattern: 'wall', shootPattern: 'none', delay: 700 },
+        { type: 'homer', formation: 'random', count: 1, movementPattern: 'homing', shootPattern: 'none', delay: 1200 },
+        { type: 'advanced', formation: 'line', count: 3, movementPattern: 'straight', shootPattern: 'aimed', delay: 1600 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 62 — FIRST ATTRACTOR: a slow mass pulling the ship toward it.
+      // Counter-drift — hold against the pull while you deal with the flank.
+      { groups: [
+        { type: 'attractor', formation: 'random', count: 1, movementPattern: 'attractor', shootPattern: 'none', delay: 0 },
+        { type: 'basic', formation: 'line', count: 5, movementPattern: 'swoop', shootPattern: 'none', delay: 500 },
+        { type: 'advanced', formation: 'vshape', count: 3, movementPattern: 'straight', shootPattern: 'aimed', delay: 1000 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 63 — Attractor + swarmers: the swarm funnels INTO the attractor
+      // (suicide bullets). Let gravity do the killing for you.
+      { groups: [
+        { type: 'attractor', formation: 'random', count: 1, movementPattern: 'attractor', shootPattern: 'none', delay: 0 },
+        { type: 'basic', formation: 'line', count: 7, movementPattern: 'swoop', shootPattern: 'none', delay: 400 },
+        { type: 'rusher', formation: 'pincer', count: 4, movementPattern: 'rusher', shootPattern: 'none', delay: 900 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 64 — Attractor + wall: the wall is fine, but your drift is bent
+      // toward it. Compensate drift while you reroute around the barricade.
+      { groups: [
+        { type: 'attractor', formation: 'random', count: 1, movementPattern: 'attractor', shootPattern: 'none', delay: 0 },
+        { type: 'wall', formation: 'line', count: 2, movementPattern: 'wall', shootPattern: 'none', delay: 500 },
+        { type: 'basic', formation: 'vshape', count: 5, movementPattern: 'swoop', shootPattern: 'none', delay: 1100 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 65 — DUAL attractors (left + right) fighting each other = a *kind*
+      // of safe pocket. Find the field null-point between them.
+      { groups: [
+        { type: 'attractor', formation: 'random', count: 2, movementPattern: 'attractor', shootPattern: 'none', delay: 0 },
+        { type: 'homer', formation: 'random', count: 1, movementPattern: 'homing', shootPattern: 'none', delay: 700 },
+        { type: 'advanced', formation: 'vshape', count: 3, movementPattern: 'straight', shootPattern: 'aimed', delay: 1100 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 66 — Attractor + homer: the homer curves WITH your counter-drift.
+      // Steer against BOTH fields.
+      { groups: [
+        { type: 'attractor', formation: 'random', count: 1, movementPattern: 'attractor', shootPattern: 'none', delay: 0 },
+        { type: 'homer', formation: 'random', count: 2, movementPattern: 'homing', shootPattern: 'none', delay: 500 },
+        { type: 'basic', formation: 'line', count: 6, movementPattern: 'swoop', shootPattern: 'none', delay: 1000 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 67 — Attractor + teleporter: it teleports, THEN pulls you from a
+      // new spot. Re-orient under a shifting field.
+      { groups: [
+        { type: 'attractor', formation: 'random', count: 1, movementPattern: 'attractor', shootPattern: 'none', delay: 0 },
+        { type: 'teleporter', formation: 'random', count: 2, movementPattern: 'teleporter', shootPattern: 'none', delay: 500 },
+        { type: 'advanced', formation: 'vshape', count: 3, movementPattern: 'straight', shootPattern: 'aimed', delay: 1200 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 68 — ELITE attractor (stronger pull, armored) + escort.
+      { groups: [
+        { type: 'attractor', formation: 'random', count: 1, movementPattern: 'attractor', shootPattern: 'none', hp: 5, shieldHp: 2, delay: 0 },
+        { type: 'basic', formation: 'line', count: 6, movementPattern: 'swoop', shootPattern: 'none', delay: 600 },
+        { type: 'elite', formation: 'random', count: 1, movementPattern: 'hover', shootPattern: 'spread5', delay: 1100 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 69 — Calm / pre-boss relief: the attractor is REMOVED — relief is
+      // literal (your controls feel silky again).
+      { groups: [
+        { type: 'basic', formation: 'line', count: 4, movementPattern: 'straight', shootPattern: 'none', delay: 0 },
+      ], isBossWave: false, isBossPrep: true },
+
+      // Wave 70 — BOSS: The Fortress Wall (BossManager handles it).
       { groups: [], isBossWave: true, isBossPrep: false },
     ];
 

@@ -1,9 +1,9 @@
 import { CONFIG } from './config';
 
 export type BossPhase = 1 | 2 | 3;
-export type BossAttackType = 'radial' | 'aimed_stream' | 'spiral' | 'fan' | 'laser' | 'ring' | 'composite' | 'shockwave' | 'soundwave' | 'crossfire' | 'snipe';
-export type BossId = 'cipher' | 'spider' | 'turrets' | 'statue' | 'creature' | 'shell' | 'omega' | 'abyss';
-export type MinionType = 'basic' | 'shooter' | 'shield' | 'rusher' | 'mirror' | 'escort' | 'aimer' | 'mine';
+export type BossAttackType = 'radial' | 'aimed_stream' | 'spiral' | 'fan' | 'laser' | 'ring' | 'composite' | 'shockwave' | 'soundwave' | 'crossfire' | 'snipe' | 'charge';
+export type BossId = 'cipher' | 'spider' | 'turrets' | 'statue' | 'creature' | 'shell' | 'fortress' | 'omega' | 'abyss';
+export type MinionType = 'basic' | 'shooter' | 'shield' | 'rusher' | 'mirror' | 'escort' | 'aimer' | 'mine' | 'gturret' | 'slot';
 
 export interface BossBulletRequest {
   x: number;
@@ -24,6 +24,8 @@ export interface BossMinion {
   active: boolean;
   patternTimer: number;
   orbitAngle: number;
+  gravityStrength: number;
+  gravityRadius: number;
 }
 
 export interface BossState {
@@ -116,6 +118,12 @@ const BOSS_DEFS: BossDef[] = [
     minionTypes: ['aimer', 'mine'], minionCount: 2, minionInterval: 5000,
   },
   {
+    id: 'fortress', name: 'FORTRESS', width: Math.floor(CONFIG.WIDTH * 0.9), height: 90,
+    color: CONFIG.COLORS.BOSS_FORTRESS, baseHp: 380, speed: 0.3, targetY: 55,
+    attacks: ['aimed_stream', 'fan', 'radial', 'charge', 'laser', 'soundwave'],
+    minionTypes: ['gturret', 'shooter', 'slot'], minionCount: 2, minionInterval: 7000,
+  },
+  {
     id: 'omega', name: 'OMEGA', width: 110, height: 80,
     color: CONFIG.COLORS.BOSS_OMEGA, baseHp: 220, speed: 0.5, targetY: 50,
     attacks: ['laser', 'ring', 'fan', 'soundwave'],
@@ -191,6 +199,27 @@ export class BossManager {
           active: true,
           patternTimer: 0,
           orbitAngle: (i / 4) * Math.PI * 2,
+          gravityStrength: 0,
+          gravityRadius: 0,
+        };
+        this.boss.minions.push(m);
+      }
+    }
+
+    // The Fortress mounts its slot weak-points across the bastion face.
+    if (def.id === 'fortress') {
+      for (let i = 0; i < 3; i++) {
+        const slotX = this.boss.x + (this.boss.width / 4) * (i + 1);
+        const m: BossMinion = {
+          x: slotX, y: this.boss.y + this.boss.height * 0.5,
+          width: 18, height: 24,
+          health: 2, maxHealth: 2,
+          type: 'slot',
+          active: true,
+          patternTimer: 0,
+          orbitAngle: i / 3,
+          gravityStrength: 0,
+          gravityRadius: 0,
         };
         this.boss.minions.push(m);
       }
@@ -313,6 +342,15 @@ export class BossManager {
       return;
     }
 
+    if (this.boss.bossId === 'fortress') {
+      // The Fortress's SLOT weak-points are its exposed targets: while any slot
+      // remains the armored bastion blocks all damage. Destroy all three slots
+      // to open the core; a respawned slot re-seals it (turret-ring pattern).
+      const slotAlive = this.boss.minions.some(m => m.active && m.type === 'slot');
+      this.boss.coreOpen = !slotAlive;
+      return;
+    }
+
     // All other bosses: always damageable (core stays exposed).
     this.boss.coreOpen = true;
   }
@@ -380,6 +418,15 @@ export class BossManager {
           }
         }
         return;
+      case 'fortress':
+        // Full-width bastion: holds the top band, only tilting its face so the
+        // sliding slot weak-points angle differently. The slots do the talking.
+        if (this.boss.moveTimer > 3400) {
+          this.boss.moveTimer = 0;
+          const room = canvasWidth - this.boss.width - 20;
+          this.boss.targetX = 10 + Math.random() * Math.max(room, 0) * 0.5;
+        }
+        break;
       case 'omega':
         if (this.boss.moveTimer > 5000) {
           this.boss.moveTimer = 0;
@@ -563,6 +610,19 @@ export class BossManager {
           }
           break;
         }
+        case 'charge': {
+          // A charge-beam: a long telegraphed wind-up, then a thick FAST beam that
+          // sweeps down a column. The gravity field is the AID — pull against it
+          // to slip out of the charge's path (D7's "use the field as a tool" thesis).
+          if (this.boss.patternTimer < 900) {
+            // Wind-up: a charging telegraph before the beam fires.
+          } else if (Math.floor(this.boss.patternTimer / 90) > Math.floor((this.boss.patternTimer - deltaTime * 1000) / 90)) {
+            const sweep = (this.boss.patternTimer - 900) * 0.0016;
+            const beamX = Math.max(10, Math.min(CONFIG.WIDTH - 10, cx + Math.sin(sweep) * CONFIG.WIDTH * 0.32));
+            requests.push({ x: beamX, y: this.boss.y + this.boss.height, angle: Math.PI / 2, speed: 9, type: 'laser' });
+          }
+          break;
+        }
       }
 
       if (this.boss.attackDuration <= 0) {
@@ -585,6 +645,7 @@ export class BossManager {
       // and only the double-eye CROSSFIRE waits for phase 2. Laser is always on.
       if (a === 'laser') return def.id === 'statue' || this.boss!.phase >= 2;
       if (a === 'snipe') return this.boss!.phase >= 2;
+      if (a === 'charge') return this.boss!.phase >= 2;
       return true;
     });
     return phaseAttacks.length > 0 ? phaseAttacks : ['radial'];
@@ -613,9 +674,9 @@ export class BossManager {
 
   private spawnMinion(type: MinionType) {
     if (!this.boss) return;
-    const health = type === 'shield' || type === 'escort' ? 3 : type === 'shooter' || type === 'rusher' ? 2 : type === 'mirror' ? 2 : type === 'mine' ? 1 : type === 'aimer' ? 1 : 1;
-    const width = type === 'shield' ? 25 : type === 'escort' ? 28 : type === 'mine' ? 14 : type === 'aimer' ? 22 : 20;
-    const height = type === 'shield' ? 25 : type === 'escort' ? 28 : type === 'mine' ? 14 : type === 'aimer' ? 22 : 20;
+    const health = type === 'shield' || type === 'escort' ? 3 : type === 'shooter' || type === 'rusher' || type === 'gturret' ? 2 : type === 'mirror' ? 2 : type === 'mine' ? 1 : type === 'aimer' ? 1 : type === 'slot' ? 2 : 1;
+    const width = type === 'shield' ? 25 : type === 'escort' ? 28 : type === 'mine' ? 14 : type === 'aimer' ? 22 : type === 'slot' ? 18 : type === 'gturret' ? 24 : 20;
+    const height = type === 'shield' ? 25 : type === 'escort' ? 28 : type === 'mine' ? 14 : type === 'aimer' ? 22 : type === 'slot' ? 24 : type === 'gturret' ? 24 : 20;
 
     let orbitAngle = Math.random() * Math.PI * 2;
     if (type === 'escort') {
@@ -627,6 +688,11 @@ export class BossManager {
       // Orbiting mines spawn around the shell and then seek the player.
       const mineCount = this.boss.minions.filter(mm => mm.type === 'mine').length;
       orbitAngle = (mineCount / 4) * Math.PI * 2;
+    }
+    if (type === 'slot') {
+      // Slots start spread across the bastion face (a fraction of its width).
+      const slotCount = this.boss.minions.filter(mm => mm.type === 'slot').length;
+      orbitAngle = (slotCount % 4) / 4;
     }
 
     this.boss.minions.push({
@@ -640,6 +706,8 @@ export class BossManager {
       active: true,
       patternTimer: Math.random() * 1000,
       orbitAngle,
+      gravityStrength: type === 'gturret' ? 0.9 : 0,
+      gravityRadius: type === 'gturret' ? 110 : 0,
     });
   }
 
@@ -746,6 +814,28 @@ export class BossManager {
           }
           break;
         }
+
+        case 'slot': {
+          // Fortress slot weak-point: RIDES the bastion face and slowly slides
+          // to a new column. It is the only exposed target while the slotted
+          // armor is up — destroy all three to open the fortress core.
+          if (this.boss) {
+            const slide = (m.orbitAngle + m.patternTimer * 0.0004) % 1;
+            m.x = this.boss.x + 20 + slide * (this.boss.width - 60) - m.width / 2;
+            m.y = this.boss.y + this.boss.height * 0.5;
+          }
+          break;
+        }
+
+        case 'gturret': {
+          // Gravity-anchored turret: a mini-turret that both fires and pulls the
+          // ship. Each one bends the field — the whole arena drifts as you fight.
+          const targetY = this.boss ? this.boss.y + this.boss.height * 0.8 : 100;
+          if (m.y < targetY) m.y += 0.8 * dt60;
+          m.x += Math.sin(m.patternTimer * 0.0015) * 1;
+          m.x = Math.max(0, Math.min(canvasWidth - m.width, m.x));
+          break;
+        }
       }
     }
   }
@@ -756,6 +846,7 @@ export class BossManager {
     if (this.boss.bossId === 'turrets' && !this.boss.coreOpen) return false;
     if (this.boss.bossId === 'creature' && !this.boss.coreOpen) return false;
     if (this.boss.bossId === 'shell' && !this.boss.coreOpen) return false;
+    if (this.boss.bossId === 'fortress' && !this.boss.coreOpen) return false;
 
     this.boss.health -= amount;
     this.boss.flashTimer = 100;
@@ -812,6 +903,23 @@ export class BossManager {
 
   getBoss(): BossState | null {
     return this.boss;
+  }
+
+  getGravitySources(): { x: number; y: number; strength: number; radius: number; hidden: boolean }[] {
+    if (!this.boss || !this.boss.active || this.boss.dying) return [];
+    const sources: { x: number; y: number; strength: number; radius: number; hidden: boolean }[] = [];
+    if (this.boss.bossId !== 'fortress') return sources;
+    for (const m of this.boss.minions) {
+      if (!m.active || m.type !== 'gturret') continue;
+      sources.push({
+        x: m.x + m.width / 2,
+        y: m.y + m.height / 2,
+        strength: m.gravityStrength,
+        radius: m.gravityRadius,
+        hidden: false,
+      });
+    }
+    return sources;
   }
 
   isBossActive(): boolean {

@@ -1,6 +1,6 @@
 import { CONFIG } from './config';
 
-export type EnemyType = 'basic' | 'advanced' | 'elite' | 'wall' | 'splinterer' | 'rusher' | 'homer' | 'mirror' | 'mirrorcopy' | 'healer' | 'leader' | 'teleporter';
+export type EnemyType = 'basic' | 'advanced' | 'elite' | 'wall' | 'splinterer' | 'rusher' | 'homer' | 'mirror' | 'mirrorcopy' | 'healer' | 'leader' | 'teleporter' | 'attractor';
 
 export interface Enemy {
   x: number;
@@ -28,6 +28,8 @@ export interface Enemy {
   isReward: boolean;
   hidden: boolean;
   telegraphing: boolean;
+  gravityStrength: number;
+  gravityRadius: number;
 }
 
 /** A tile of an enemy that must be stripped (shield/armor) before core damage. */
@@ -84,11 +86,12 @@ export class EnemyManager {
     const isSplinterer = type === 'splinterer';
     const isRusher = type === 'rusher';
     const isHomer = type === 'homer';
-    const health = hp ?? (isWall ? 3 : type === 'elite' ? 4 : type === 'leader' ? 4 : type === 'advanced' ? 2 : type === 'mirror' ? 2 : type === 'healer' ? 1 : isSplinterer ? 1 : 1);
+    const isAttractor = type === 'attractor';
+    const health = hp ?? (isWall ? 3 : type === 'elite' ? 4 : type === 'leader' ? 4 : type === 'advanced' ? 2 : type === 'mirror' ? 2 : type === 'healer' ? 1 : isSplinterer ? 1 : isAttractor ? 3 : 1);
     this.enemies.push({
       x, y,
-      width: isWall ? 30 : type === 'elite' ? 35 : type === 'leader' ? 35 : isRusher ? 26 : isHomer ? 26 : CONFIG.ENEMY_WIDTH,
-      height: isWall ? 80 : type === 'elite' ? 35 : type === 'leader' ? 35 : isRusher ? 26 : isHomer ? 26 : CONFIG.ENEMY_HEIGHT,
+      width: isWall ? 30 : isAttractor ? 40 : type === 'elite' ? 35 : type === 'leader' ? 35 : isRusher ? 26 : isHomer ? 26 : CONFIG.ENEMY_WIDTH,
+      height: isWall ? 80 : isAttractor ? 40 : type === 'elite' ? 35 : type === 'leader' ? 35 : isRusher ? 26 : isHomer ? 26 : CONFIG.ENEMY_HEIGHT,
       speed,
       health,
       maxHealth: health,
@@ -110,6 +113,8 @@ export class EnemyManager {
       isReward,
       hidden: spawnHidden,
       telegraphing: false,
+      gravityStrength: isAttractor ? 1 : 0,
+      gravityRadius: isAttractor ? 150 : 0,
     });
 
     if (formationId >= 0 && !this.formationOrigins.has(formationId)) {
@@ -462,6 +467,16 @@ export class EnemyManager {
             break;
           }
 
+          case 'attractor': {
+            // A slow, heavy mass that drifts down and sways side to side so the
+            // gravity well stays menacing, lingering on-screen instead of passing.
+            // The player must budget their drift against it (D7's verb).
+            enemy.y += speed * 0.25;
+            enemy.x += Math.sin(enemy.patternTimer * 0.0016) * 0.6;
+            enemy.x = Math.max(20, Math.min(CONFIG.WIDTH - enemy.width - 20, enemy.x));
+            break;
+          }
+
           default:
             enemy.y += speed;
         }
@@ -684,6 +699,8 @@ export class EnemyManager {
         isReward: false,
         hidden: false,
         telegraphing: false,
+        gravityStrength: 0,
+        gravityRadius: 0,
       };
       this.enemies.push(copy);
     }
@@ -758,6 +775,10 @@ export class EnemyManager {
         case 'teleporter':
           color = CONFIG.COLORS.ENEMY_TELEPORTER;
           shape = 'teleporter';
+          break;
+        case 'attractor':
+          color = CONFIG.COLORS.ENEMY_ATTRACTOR;
+          shape = 'attractor';
           break;
       }
 
@@ -968,6 +989,43 @@ export class EnemyManager {
         ctx.arc(centerX, centerY, enemy.width * 0.6 + spark * 3, 0, Math.PI * 2);
         ctx.stroke();
         ctx.globalAlpha = 1;
+      } else if (shape === 'attractor') {
+        // Gravity well: a dark core with swirling orbit rings and a halo showing
+        // its pull radius. The halo is a direct threat-read — drift too close and
+        // the mass owns your movement.
+        const swirl = (Math.sin(enemy.patternTimer * 0.01) + 1) / 2;
+        const r = enemy.width / 2;
+
+        // Halo / pull radius.
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 1;
+        ctx.globalAlpha = 0.18 + swirl * 0.18;
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, enemy.gravityRadius * 0.5, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+
+        // Internal orbit rings (read as swirling).
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 12;
+        ctx.strokeStyle = color;
+        for (let k = 1; k <= 3; k++) {
+          ctx.globalAlpha = 0.25 + (k * 0.12);
+          ctx.beginPath();
+          ctx.arc(centerX, centerY, r * (0.3 + k * 0.18) + Math.sin(enemy.patternTimer * 0.008 + k) * 1.5, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+        ctx.globalAlpha = 1;
+
+        // Dense dark core.
+        ctx.fillStyle = '#1A1024';
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, r * 0.38, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, r * 0.2, 0, Math.PI * 2);
+        ctx.fill();
       } else {
         const hw = enemy.width / 2;
         const hh = enemy.height / 2;
@@ -1024,6 +1082,24 @@ export class EnemyManager {
 
   getActive(): Enemy[] {
     return this.enemies;
+  }
+
+  getGravitySources(): { x: number; y: number; strength: number; radius: number; hidden: boolean }[] {
+    const sources: { x: number; y: number; strength: number; radius: number; hidden: boolean }[] = [];
+    for (const e of this.enemies) {
+      if (!e.active) continue;
+      if (e.type !== 'attractor') continue;
+      // Elite attractors (armored via hp/shield) pull noticeably harder.
+      const elite = e.health >= 5 || e.shieldHp > 0;
+      sources.push({
+        x: e.x + e.width / 2,
+        y: e.y + e.height / 2,
+        strength: e.gravityStrength * (elite ? 1.7 : 1),
+        radius: e.gravityRadius * (elite ? 1.15 : 1),
+        hidden: e.hidden || e.telegraphing,
+      });
+    }
+    return sources;
   }
 
   countActive(): number {
