@@ -222,7 +222,8 @@ export class GameEngine {
         cmd.movementPattern, cmd.shootPattern,
         cmd.formationId, cmd.offsetX, cmd.offsetY,
         cmd.hp, cmd.aimShards, cmd.shieldHp,
-        cmd.isReward, cmd.startHidden
+        cmd.isReward, cmd.startHidden,
+        cmd.indestructible, cmd.explosive
       );
     }
 
@@ -779,6 +780,22 @@ export class GameEngine {
         this.bullets.acquireAngled(cx, cy, angle, baseSpeed + Math.random() * 0.6, 'aimed');
       }
       this.audio.playExplosionSmall();
+    }
+
+    // Explosive terrain (the D8 crate): shooting it is a DIFFERENT danger than
+    // shooting through it — it blows up, spraying a radial burst from the crater.
+    // "Destroy it" is the lesson; "don't be near when it pops" is the tax.
+    if (enemy.type === 'terrain' && (enemy as { explosive?: boolean }).explosive) {
+      const cx = enemy.x + enemy.width / 2;
+      const cy = enemy.y + enemy.height / 2;
+      const shardCount = 10;
+      const baseSpeed = 2.6;
+      for (let i = 0; i < shardCount; i++) {
+        const angle = (i / shardCount) * Math.PI * 2 + Math.random() * 0.3;
+        this.bullets.acquireAngled(cx, cy, angle, baseSpeed + Math.random() * 0.4, 'radial');
+      }
+      this.audio.playExplosionSmall();
+      this.particles.emitBigExplosion(cx, cy);
     }
 
     if (enemy.type === 'elite' && Math.random() < 0.4) {
@@ -1403,6 +1420,42 @@ export class GameEngine {
           ctx.shadowBlur = 10;
           ctx.fillRect(cx - 4, cy - 10, 8, 20);
           break;
+
+        case 'drone':
+          // Terrain-drone: a jagged block that glides to your lane, then PLANTS
+          // into a stationary crate that primes a radial burst. Early phase =
+          // it still has wings; planted = it's the cage around you.
+          if (m.patternTimer < 1400) {
+            // Gliding — winged block hunting your lane.
+            ctx.fillStyle = CONFIG.COLORS.BOSS_MECH_DRONE;
+            ctx.shadowColor = CONFIG.COLORS.BOSS_MECH_DRONE;
+            ctx.shadowBlur = 10;
+            ctx.fillRect(cx - m.width / 2, cy - m.height / 2, m.width, m.height);
+            ctx.fillStyle = '#FFFFFF';
+            ctx.beginPath();
+            ctx.moveTo(cx, m.y + m.height);
+            ctx.lineTo(m.x + m.width, m.y);
+            ctx.lineTo(m.x, m.y);
+            ctx.closePath();
+            ctx.fill();
+          } else {
+            // Planted crate — ticking down, borderline about to burst.
+            const pulse = (m.patternTimer - 1400) / 1800;
+            ctx.fillStyle = CONFIG.COLORS.BOSS_MECH;
+            ctx.shadowColor = CONFIG.COLORS.BOSS_MECH;
+            ctx.shadowBlur = 8 + pulse * 14;
+            ctx.fillRect(cx - m.width / 2, cy - m.height / 2, m.width, m.height);
+            ctx.strokeStyle = CONFIG.COLORS.BOSS_MECH_SPARK;
+            ctx.lineWidth = 2;
+            ctx.strokeRect(cx - m.width / 2, cy - m.height / 2, m.width, m.height);
+            ctx.beginPath();
+            ctx.moveTo(cx - m.width / 2 + 3, cy - m.height / 2 + 3);
+            ctx.lineTo(cx + m.width / 2 - 3, cy + m.height / 2 - 3);
+            ctx.moveTo(cx + m.width / 2 - 3, cy - m.height / 2 + 3);
+            ctx.lineTo(cx - m.width / 2 + 3, cy + m.height / 2 - 3);
+            ctx.stroke();
+          }
+          break;
       }
 
       if (m.maxHealth > 1) {
@@ -1833,13 +1886,74 @@ export class GameEngine {
         }
         break;
       }
+
+      case 'mech': {
+        // The Nimble Rocket-Skater Mech: a red biped that CHASES you on X with
+        // speed that climbs each phase, throwing spark trails from its skates as
+        // it leans into the hunt. The "fast boss" — reads against every rooted
+        // boss before it.
+        // Sparky vent trail (its skates) flicker behind the body.
+        ctx.strokeStyle = CONFIG.COLORS.BOSS_MECH_SPARK;
+        ctx.lineWidth = 1.5;
+        for (let i = 0; i < 4; i++) {
+          const tw = Math.sin(boss.patternTimer * 0.05 + i * 1.7);
+          const sx = boss.x + boss.width * (0.35 + i * 0.1);
+          ctx.beginPath();
+          ctx.moveTo(sx, boss.y + boss.height - 4);
+          ctx.lineTo(sx + tw * 4, boss.y + boss.height + 8 + i * 3);
+          ctx.stroke();
+        }
+
+        // Biped body: wide shoulders, narrow waist, rocket-skate feet below.
+        ctx.fillStyle = boss.color;
+        ctx.shadowColor = boss.color;
+        ctx.shadowBlur = 20;
+        // Torso (shoulders out, hips in).
+        ctx.beginPath();
+        ctx.moveTo(boss.x + boss.width * 0.12, boss.y);
+        ctx.lineTo(boss.x + boss.width * 0.88, boss.y);
+        ctx.lineTo(boss.x + boss.width * 0.62, boss.y + boss.height * 0.62);
+        ctx.lineTo(boss.x + boss.width * 0.38, boss.y + boss.height * 0.62);
+        ctx.closePath();
+        ctx.fill();
+
+        // Head visor (dark + a single bright eye — the hunter's gaze).
+        ctx.fillStyle = '#1A1D2E';
+        ctx.fillRect(cx - 8, boss.y - 6, 16, 9);
+        ctx.fillStyle = CONFIG.COLORS.BOSS_MECH_SPARK;
+        ctx.shadowColor = CONFIG.COLORS.BOSS_MECH_SPARK;
+        ctx.shadowBlur = 12;
+        ctx.fillRect(cx - 2, boss.y - 3, 4, 7);
+
+        // Rocket-skate feet: paired pods under the body.
+        ctx.fillStyle = boss.color;
+        ctx.shadowColor = boss.color;
+        ctx.fillRect(boss.x + boss.width * 0.2, boss.y + boss.height * 0.62, boss.width * 0.22, 12);
+        ctx.fillRect(boss.x + boss.width * 0.58, boss.y + boss.height * 0.62, boss.width * 0.22, 12);
+
+        // Core (the mech's reactor): always damageable — the hunter's gut.
+        if (boss.coreOpen) {
+          const coreColor = boss.phase >= 3 ? '#FF4433' : boss.phase === 2 ? '#FFAA00' : CONFIG.COLORS.BOSS_MECH_SPARK;
+          ctx.fillStyle = coreColor;
+          ctx.shadowColor = coreColor;
+          ctx.shadowBlur = 22;
+          ctx.beginPath();
+          ctx.arc(cx, boss.y + boss.height * 0.4, 8, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.fillStyle = '#FFFFFF';
+          ctx.beginPath();
+          ctx.arc(cx, boss.y + boss.height * 0.4, 3, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        break;
+      }
     }
 
     const eyeY = boss.y + boss.height * 0.35;
     ctx.fillStyle = boss.phase === 3 ? '#FF00FF' : boss.phase === 2 ? '#FF6600' : '#FFFFFF';
     ctx.shadowColor = ctx.fillStyle;
     ctx.shadowBlur = 12;
-    if (boss.bossId !== 'spider' && boss.bossId !== 'turrets' && boss.bossId !== 'statue' && boss.bossId !== 'shell' && boss.bossId !== 'fortress') {
+    if (boss.bossId !== 'spider' && boss.bossId !== 'turrets' && boss.bossId !== 'statue' && boss.bossId !== 'shell' && boss.bossId !== 'fortress' && boss.bossId !== 'mech') {
       ctx.beginPath();
       ctx.arc(cx, eyeY, boss.width * 0.08, 0, Math.PI * 2);
       ctx.fill();

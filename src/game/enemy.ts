@@ -1,6 +1,6 @@
 import { CONFIG } from './config';
 
-export type EnemyType = 'basic' | 'advanced' | 'elite' | 'wall' | 'splinterer' | 'rusher' | 'homer' | 'mirror' | 'mirrorcopy' | 'healer' | 'leader' | 'teleporter' | 'attractor';
+export type EnemyType = 'basic' | 'advanced' | 'elite' | 'wall' | 'splinterer' | 'rusher' | 'homer' | 'mirror' | 'mirrorcopy' | 'healer' | 'leader' | 'teleporter' | 'attractor' | 'terrain';
 
 export interface Enemy {
   x: number;
@@ -30,6 +30,9 @@ export interface Enemy {
   telegraphing: boolean;
   gravityStrength: number;
   gravityRadius: number;
+  indestructible: boolean;
+  explosive: boolean;
+  lifespan: number;
 }
 
 /** A tile of an enemy that must be stripped (shield/armor) before core damage. */
@@ -80,18 +83,21 @@ export class EnemyManager {
     aimShards: boolean = false,
     shieldHp?: number,
     isReward: boolean = false,
-    spawnHidden: boolean = false
+    spawnHidden: boolean = false,
+    indestructible: boolean = false,
+    explosive: boolean = false
   ) {
     const isWall = type === 'wall';
     const isSplinterer = type === 'splinterer';
     const isRusher = type === 'rusher';
     const isHomer = type === 'homer';
     const isAttractor = type === 'attractor';
-    const health = hp ?? (isWall ? 3 : type === 'elite' ? 4 : type === 'leader' ? 4 : type === 'advanced' ? 2 : type === 'mirror' ? 2 : type === 'healer' ? 1 : isSplinterer ? 1 : isAttractor ? 3 : 1);
+    const isTerrain = type === 'terrain';
+    const health = hp ?? (isWall ? 3 : type === 'elite' ? 4 : type === 'leader' ? 4 : type === 'advanced' ? 2 : type === 'mirror' ? 2 : type === 'healer' ? 1 : isSplinterer ? 1 : isAttractor ? 3 : isTerrain ? 3 : 1);
     this.enemies.push({
       x, y,
-      width: isWall ? 30 : isAttractor ? 40 : type === 'elite' ? 35 : type === 'leader' ? 35 : isRusher ? 26 : isHomer ? 26 : CONFIG.ENEMY_WIDTH,
-      height: isWall ? 80 : isAttractor ? 40 : type === 'elite' ? 35 : type === 'leader' ? 35 : isRusher ? 26 : isHomer ? 26 : CONFIG.ENEMY_HEIGHT,
+      width: isWall ? 30 : isAttractor ? 40 : isTerrain ? 38 : type === 'elite' ? 35 : type === 'leader' ? 35 : isRusher ? 26 : isHomer ? 26 : CONFIG.ENEMY_WIDTH,
+      height: isWall ? 80 : isAttractor ? 40 : isTerrain ? 38 : type === 'elite' ? 35 : type === 'leader' ? 35 : isRusher ? 26 : isHomer ? 26 : CONFIG.ENEMY_HEIGHT,
       speed,
       health,
       maxHealth: health,
@@ -115,6 +121,9 @@ export class EnemyManager {
       telegraphing: false,
       gravityStrength: isAttractor ? 1 : 0,
       gravityRadius: isAttractor ? 150 : 0,
+      indestructible,
+      explosive,
+      lifespan: indestructible ? 9000 : -1,
     });
 
     if (formationId >= 0 && !this.formationOrigins.has(formationId)) {
@@ -477,6 +486,29 @@ export class EnemyManager {
             break;
           }
 
+          case 'terrain': {
+            // D8 terrain-blocker: descends into a PARKED slot (a shelf that
+            // scales by its column), then HOLDS — occupying the field, eating
+            // your shots and shading enemies behind it for the wave.
+            const parkY = 30 + (Math.min(enemy.originX, CONFIG.WIDTH - enemy.width) / CONFIG.WIDTH) * 170;
+            if (enemy.y < parkY) {
+              enemy.y += speed * 0.4;
+            } else {
+              // Parked: only a hair of hover so it reads as anchored debris.
+              enemy.y += Math.sin(enemy.patternTimer * 0.0008) * 0.15;
+              // Indestructible cover despawns after its lifespan so it cannot
+              // linger across waves as permanent clutter.
+              if (enemy.indestructible && enemy.lifespan > 0) {
+                enemy.lifespan -= deltaTime * 1000;
+                if (enemy.lifespan <= 0) {
+                  enemy.flashTimer = 300;
+                  this.remove(enemy);
+                }
+              }
+            }
+            break;
+          }
+
           default:
             enemy.y += speed;
         }
@@ -655,6 +687,9 @@ export class EnemyManager {
   damageEnemy(enemy: Enemy, amount: number): boolean {
     if (!enemy.active) return false;
     if (enemy.hidden || enemy.telegraphing) return false;
+    // Indestructible terrain: shots are ABSORBED (the block hides enemies and
+    // eats your fire) but it never dies — route fire AROUND it, never at it.
+    if (enemy.type === 'terrain' && enemy.indestructible) return false;
     if (enemy.shieldHp > 0) {
       enemy.shieldHp -= amount;
       enemy.flashTimer = 100;
@@ -701,6 +736,9 @@ export class EnemyManager {
         telegraphing: false,
         gravityStrength: 0,
         gravityRadius: 0,
+        indestructible: false,
+        explosive: false,
+        lifespan: -1,
       };
       this.enemies.push(copy);
     }
@@ -780,6 +818,16 @@ export class EnemyManager {
           color = CONFIG.COLORS.ENEMY_ATTRACTOR;
           shape = 'attractor';
           break;
+        case 'terrain':
+          if (enemy.indestructible) {
+            color = CONFIG.COLORS.ENEMY_TERRAIN_INDESTRUCTIBLE;
+          } else if (enemy.explosive) {
+            color = CONFIG.COLORS.ENEMY_TERRAIN_EXPLOSIVE;
+          } else {
+            color = CONFIG.COLORS.ENEMY_TERRAIN;
+          }
+          shape = 'terrain';
+          break;
       }
 
       if (enemy.telegraphing) {
@@ -854,6 +902,46 @@ export class EnemyManager {
         ctx.arc(centerX, centerY, 5, 0, Math.PI * 2);
         ctx.fill();
         ctx.shadowBlur = 0;
+      } else if (shape === 'terrain') {
+        // D8 terrain-blocker: a slab/crate that parks in a lane and absorbs fire.
+        // Reads by value — dark indestructible rock, bright hazard crate when it
+        // explodes on death, mid debris otherwise.
+        ctx.fillStyle = color;
+        ctx.globalAlpha = 0.9;
+        ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
+        ctx.globalAlpha = 1;
+
+        ctx.strokeStyle = enemy.explosive ? '#FFE000' : 'rgba(255,255,255,0.35)';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(enemy.x + 1, enemy.y + 1, enemy.width - 2, enemy.height - 2);
+
+        ctx.lineWidth = 1;
+        // Cross-brace read: the crate's strapping (a hazard X on explosives).
+        ctx.beginPath();
+        ctx.moveTo(enemy.x + 3, enemy.y + 3);
+        ctx.lineTo(enemy.x + enemy.width - 3, enemy.y + enemy.height - 3);
+        ctx.moveTo(enemy.x + enemy.width - 3, enemy.y + 3);
+        ctx.lineTo(enemy.x + 3, enemy.y + enemy.height - 3);
+        ctx.stroke();
+
+        if (enemy.explosive) {
+          ctx.fillStyle = '#FFE000';
+          ctx.shadowColor = '#FFE000';
+          ctx.shadowBlur = 8;
+          ctx.beginPath();
+          ctx.arc(centerX, centerY, 3, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.shadowBlur = 0;
+        } else if (enemy.indestructible) {
+          ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+          for (let j = 0; j < 3; j++) {
+            const sy = enemy.y + ((j + 1) * enemy.height) / 4;
+            ctx.beginPath();
+            ctx.moveTo(enemy.x + 2, sy);
+            ctx.lineTo(enemy.x + enemy.width - 2, sy);
+            ctx.stroke();
+          }
+        }
       } else if (shape === 'splinterer') {
         // Spiky star/orb: fragile, ready to shatter and spray shards outward.
         const points = 8;

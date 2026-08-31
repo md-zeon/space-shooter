@@ -17,6 +17,8 @@ export interface WaveGroup {
   bottomEntry?: boolean;
   isReward?: boolean;
   startHidden?: boolean;
+  indestructible?: boolean;
+  explosive?: boolean;
 }
 
 export interface Wave {
@@ -42,6 +44,8 @@ export interface SpawnCommand {
   bottomEntry?: boolean;
   isReward?: boolean;
   startHidden?: boolean;
+  indestructible?: boolean;
+  explosive?: boolean;
 }
 
 const FORMATION_POOL: FormationType[] = [
@@ -224,6 +228,7 @@ function getMovementPattern(formation: FormationType, type: EnemyType): string {
   if (type === 'healer' || type === 'leader') return 'support';
   if (type === 'teleporter') return 'teleporter';
   if (type === 'attractor') return 'attractor';
+  if (type === 'terrain') return 'terrain';
   switch (formation) {
     case 'line': return 'straight';
     case 'vshape': return 'straight';
@@ -241,6 +246,7 @@ function getShootPattern(type: EnemyType, difficulty: number): string {
   if (type === 'splinterer') return 'none';
   if (type === 'teleporter') return 'none';
   if (type === 'attractor') return 'none';
+  if (type === 'terrain') return 'none';
   if (type === 'healer') return 'none';
   if (type === 'leader') return difficulty >= 6 ? 'aimed' : 'spread3';
   if (difficulty <= 2) {
@@ -798,6 +804,94 @@ export class WaveManager {
 
       // Wave 70 — BOSS: The Fortress Wall (BossManager handles it).
       { groups: [], isBossWave: true, isBossPrep: false },
+
+      // ===== Decade 8 (waves 71-80): Terrain / Line-of-Sight =====
+      // The new verb is PLANNING AROUND BLOCKERS: terrain occupies the field,
+      // eats your shots, and hides enemies behind it — you re-route fire and
+      // deny their cover. Completes the block-you / move-you / hide-from-you
+      // spatial trilogy. D8 signature entry grammar: terrain-guided paths
+      // (enemies enter THROUGH / BEHIND blockers).
+
+      // Wave 71 — Air/recovery: re-presents earlier verbs at D1 complexity, NO
+      // terrain — the decade rule keeps the post-boss air clean.
+      { groups: [
+        { type: 'basic', formation: 'line', count: 5, movementPattern: 'swoop', shootPattern: 'none', delay: 0 },
+        { type: 'wall', formation: 'random', count: 1, movementPattern: 'wall', shootPattern: 'none', delay: 700 },
+        { type: 'homer', formation: 'random', count: 1, movementPattern: 'homing', shootPattern: 'none', delay: 1200 },
+        { type: 'advanced', formation: 'vshape', count: 3, movementPattern: 'straight', shootPattern: 'aimed', delay: 1600 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 72 — FIRST terrain block: a destructible crate parks in a column and
+      // reserves it — your shots are eaten until you clear it. Plan around the
+      // blockage (route to the open lanes).
+      { groups: [
+        { type: 'terrain', formation: 'random', count: 1, movementPattern: 'terrain', shootPattern: 'none', delay: 0 },
+        { type: 'basic', formation: 'line', count: 5, movementPattern: 'swoop', shootPattern: 'none', delay: 500 },
+        { type: 'advanced', formation: 'pincer', count: 2, movementPattern: 'ambush', shootPattern: 'aimed', bottomEntry: true, delay: 1000 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 73 — Terrain + enemies hiding BEHIND it: the shooter uses the crate
+      // as cover — you must deny it by moving to a flank to shoot through the
+      // opening, not straight through the block.
+      { groups: [
+        { type: 'terrain', formation: 'random', count: 2, movementPattern: 'terrain', shootPattern: 'none', delay: 0 },
+        { type: 'basic', formation: 'line', count: 4, movementPattern: 'straight', shootPattern: 'aimed', delay: 600 },
+        { type: 'advanced', formation: 'line', count: 2, movementPattern: 'hover', shootPattern: 'spread3', delay: 1000 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 74 — INDESTRUCTIBLE terrain (R-Type wall) + swarmers: a permanent
+      // obstacle you cannot clear — route AROUND it forever while the swarm dips
+      // through the gap it leaves.
+      { groups: [
+        { type: 'terrain', formation: 'random', count: 1, movementPattern: 'terrain', shootPattern: 'none', indestructible: true, delay: 0 },
+        { type: 'basic', formation: 'line', count: 6, movementPattern: 'swoop', shootPattern: 'none', delay: 500 },
+        { type: 'rusher', formation: 'pincer', count: 4, movementPattern: 'rusher', shootPattern: 'none', delay: 1100 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 75 — EXPLOSIVE terrain (Sky Force crate): shoot it and it BLOWS —
+      // area denial. Either pick your kill angle (do it far away) or leave it and
+      // snake around.
+      { groups: [
+        { type: 'terrain', formation: 'random', count: 2, movementPattern: 'terrain', shootPattern: 'none', explosive: true, delay: 0 },
+        { type: 'basic', formation: 'vshape', count: 5, movementPattern: 'straight', shootPattern: 'aimed', delay: 700 },
+        { type: 'homer', formation: 'random', count: 1, movementPattern: 'homing', shootPattern: 'none', delay: 1300 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 76 — Terrain + wall + gravity: the FULL R-Type spatial trilogy at
+      // once (blocks-you + hides-you + moves-you). Triple spatial synthesis.
+      { groups: [
+        { type: 'terrain', formation: 'random', count: 1, movementPattern: 'terrain', shootPattern: 'none', delay: 0 },
+        { type: 'attractor', formation: 'random', count: 1, movementPattern: 'attractor', shootPattern: 'none', delay: 400 },
+        { type: 'wall', formation: 'random', count: 1, movementPattern: 'wall', shootPattern: 'none', delay: 900 },
+        { type: 'basic', formation: 'line', count: 6, movementPattern: 'swoop', shootPattern: 'none', delay: 1300 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 77 — Terrain hiding a HEALER behind indestructible cover: solve the
+      // impossible-seeming priority — flank the heal, don't front-snipe it.
+      { groups: [
+        { type: 'terrain', formation: 'random', count: 1, movementPattern: 'terrain', shootPattern: 'none', indestructible: true, delay: 0 },
+        { type: 'healer', formation: 'random', count: 1, movementPattern: 'support', shootPattern: 'none', shieldHp: 2, delay: 400 },
+        { type: 'rusher', formation: 'line', count: 4, movementPattern: 'rusher', shootPattern: 'none', delay: 900 },
+        { type: 'basic', formation: 'line', count: 5, movementPattern: 'swoop', shootPattern: 'none', delay: 1300 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 78 — Elite + terrain: the elite WEAVES through the rubble, using the
+      // debris as a shield wall. Break their cover to break them.
+      { groups: [
+        { type: 'terrain', formation: 'random', count: 2, movementPattern: 'terrain', shootPattern: 'none', delay: 0 },
+        { type: 'elite', formation: 'random', count: 1, movementPattern: 'hover', shootPattern: 'spread5', shieldHp: 2, delay: 600 },
+        { type: 'advanced', formation: 'line', count: 4, movementPattern: 'straight', shootPattern: 'aimed', delay: 1100 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 79 — Calm / pre-boss relief: terrain stays but it's sparse — back to
+      // basics with rubble for texture, nothing to solve.
+      { groups: [
+        { type: 'terrain', formation: 'random', count: 1, movementPattern: 'terrain', shootPattern: 'none', delay: 0 },
+        { type: 'basic', formation: 'line', count: 4, movementPattern: 'straight', shootPattern: 'none', delay: 500 },
+      ], isBossWave: false, isBossPrep: true },
+
+      // Wave 80 — BOSS: The Nimble Rocket-Skater Mech (BossManager handles it).
+      { groups: [], isBossWave: true, isBossPrep: false },
     ];
 
     for (let i = 0; i < authored.length; i++) {
@@ -876,6 +970,8 @@ export class WaveManager {
           bottomEntry: group.bottomEntry,
           isReward: group.isReward,
           startHidden: group.startHidden,
+          indestructible: group.indestructible,
+          explosive: group.explosive,
         });
       }
     }

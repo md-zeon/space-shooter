@@ -2,8 +2,8 @@ import { CONFIG } from './config';
 
 export type BossPhase = 1 | 2 | 3;
 export type BossAttackType = 'radial' | 'aimed_stream' | 'spiral' | 'fan' | 'laser' | 'ring' | 'composite' | 'shockwave' | 'soundwave' | 'crossfire' | 'snipe' | 'charge';
-export type BossId = 'cipher' | 'spider' | 'turrets' | 'statue' | 'creature' | 'shell' | 'fortress' | 'omega' | 'abyss';
-export type MinionType = 'basic' | 'shooter' | 'shield' | 'rusher' | 'mirror' | 'escort' | 'aimer' | 'mine' | 'gturret' | 'slot';
+export type BossId = 'cipher' | 'spider' | 'turrets' | 'statue' | 'creature' | 'shell' | 'fortress' | 'mech' | 'omega' | 'abyss';
+export type MinionType = 'basic' | 'shooter' | 'shield' | 'rusher' | 'mirror' | 'escort' | 'aimer' | 'mine' | 'gturret' | 'slot' | 'drone';
 
 export interface BossBulletRequest {
   x: number;
@@ -122,6 +122,12 @@ const BOSS_DEFS: BossDef[] = [
     color: CONFIG.COLORS.BOSS_FORTRESS, baseHp: 380, speed: 0.3, targetY: 55,
     attacks: ['aimed_stream', 'fan', 'radial', 'charge', 'laser', 'soundwave'],
     minionTypes: ['gturret', 'shooter', 'slot'], minionCount: 2, minionInterval: 7000,
+  },
+  {
+    id: 'mech', name: 'ROCKET-SKATER', width: 92, height: 120,
+    color: CONFIG.COLORS.BOSS_MECH, baseHp: 310, speed: 0.5, targetY: 95,
+    attacks: ['aimed_stream', 'fan', 'laser', 'ring'],
+    minionTypes: ['drone'], minionCount: 1, minionInterval: 3000,
   },
   {
     id: 'omega', name: 'OMEGA', width: 110, height: 80,
@@ -266,10 +272,10 @@ export class BossManager {
     )];
 
     this.updateCoreState(deltaTime);
-    this.updateMovement(deltaTime, canvasWidth, bossDef);
+    this.updateMovement(deltaTime, canvasWidth, playerX, bossDef);
     requests.push(...this.updateAttacks(deltaTime, canvasWidth, playerX, bossDef));
     this.updateMinionSpawning(deltaTime);
-    this.updateMinions(deltaTime, canvasWidth, playerX);
+    requests.push(...this.updateMinions(deltaTime, canvasWidth, playerX));
 
     return requests;
   }
@@ -355,7 +361,7 @@ export class BossManager {
     this.boss.coreOpen = true;
   }
 
-  private updateMovement(deltaTime: number, canvasWidth: number, def: BossDef) {
+  private updateMovement(deltaTime: number, canvasWidth: number, playerX: number, def: BossDef) {
     if (!this.boss) return;
     const dt60 = deltaTime * 60;
     this.boss.moveTimer += deltaTime * 1000;
@@ -427,6 +433,20 @@ export class BossManager {
           this.boss.targetX = 10 + Math.random() * Math.max(room, 0) * 0.5;
         }
         break;
+      case 'mech': {
+        // The nimble rocket-skater: a HUNTER — it actively chases the player on
+        // X, lean climbing every phase. It is THE "fast boss": you dodge a chaser
+        // while its terrain-drones cage your lanes. Y stays in the top band with
+        // a nervous bob.
+        const chaseStrength = this.boss.phase >= 3 ? 0.08 : this.boss.phase === 2 ? 0.065 : 0.05;
+        const mx = this.boss.x + this.boss.width / 2;
+        const dx = playerX - mx;
+        const step = Math.sign(dx) * Math.min(Math.abs(dx) * chaseStrength, 4.2 * dt60);
+        this.boss.x += step;
+        this.boss.x = Math.max(10, Math.min(canvasWidth - this.boss.width - 10, this.boss.x));
+        this.boss.y = this.boss.targetY + Math.sin(this.boss.moveTimer * 0.003) * 6;
+        return;
+      }
       case 'omega':
         if (this.boss.moveTimer > 5000) {
           this.boss.moveTimer = 0;
@@ -674,9 +694,9 @@ export class BossManager {
 
   private spawnMinion(type: MinionType) {
     if (!this.boss) return;
-    const health = type === 'shield' || type === 'escort' ? 3 : type === 'shooter' || type === 'rusher' || type === 'gturret' ? 2 : type === 'mirror' ? 2 : type === 'mine' ? 1 : type === 'aimer' ? 1 : type === 'slot' ? 2 : 1;
-    const width = type === 'shield' ? 25 : type === 'escort' ? 28 : type === 'mine' ? 14 : type === 'aimer' ? 22 : type === 'slot' ? 18 : type === 'gturret' ? 24 : 20;
-    const height = type === 'shield' ? 25 : type === 'escort' ? 28 : type === 'mine' ? 14 : type === 'aimer' ? 22 : type === 'slot' ? 24 : type === 'gturret' ? 24 : 20;
+    const health = type === 'shield' || type === 'escort' ? 3 : type === 'shooter' || type === 'rusher' || type === 'gturret' ? 2 : type === 'mirror' ? 2 : type === 'drone' ? 2 : type === 'slot' ? 2 : type === 'mine' ? 1 : type === 'aimer' ? 1 : 1;
+    const width = type === 'shield' ? 25 : type === 'escort' ? 28 : type === 'mine' ? 14 : type === 'aimer' ? 22 : type === 'slot' ? 18 : type === 'gturret' ? 24 : type === 'drone' ? 24 : 20;
+    const height = type === 'shield' ? 25 : type === 'escort' ? 28 : type === 'mine' ? 14 : type === 'aimer' ? 22 : type === 'slot' ? 24 : type === 'gturret' ? 24 : type === 'drone' ? 20 : 20;
 
     let orbitAngle = Math.random() * Math.PI * 2;
     if (type === 'escort') {
@@ -711,9 +731,10 @@ export class BossManager {
     });
   }
 
-  private updateMinions(deltaTime: number, canvasWidth: number, playerX: number) {
-    if (!this.boss) return;
+  private updateMinions(deltaTime: number, canvasWidth: number, playerX: number): BossBulletRequest[] {
+    if (!this.boss) return [];
     const dt60 = deltaTime * 60;
+    const burst: BossBulletRequest[] = [];
 
     for (let i = this.boss.minions.length - 1; i >= 0; i--) {
       const m = this.boss.minions[i];
@@ -836,8 +857,35 @@ export class BossManager {
           m.x = Math.max(0, Math.min(canvasWidth - m.width, m.x));
           break;
         }
+
+        case 'drone': {
+          // The mech's terrain-drone: glides to your lane, plants into a station-
+          // ary block that reserves that column (blocks your shots), then primes
+          // a radial burst unless you destroy it. Its cycle = the closing cage.
+          if (m.patternTimer < 1400) {
+            const mc = m.x + m.width / 2;
+            const diff = playerX - mc;
+            m.x += Math.sign(diff) * Math.min(Math.abs(diff) * 0.02, 1.8 * dt60);
+            m.y += 1.1 * dt60;
+          } else if (m.patternTimer < 3200) {
+            // Planted block: stationary, hittable, seals the lane.
+          } else if (m.patternTimer >= 3200 && m.patternTimer - deltaTime * 1000 < 3200) {
+            // Primed: a radial burst from the crate, then it despawns (the boom
+            // IS the column closing). Destroy it inside 1.6s to leave a gap.
+            const mc = m.x + m.width / 2;
+            const myc = m.y + m.height / 2;
+            for (let b = 0; b < 12; b++) {
+              const angle = (b / 12) * Math.PI * 2 + m.patternTimer * 0.002;
+              burst.push({ x: mc, y: myc, angle, speed: 3, type: 'radial' });
+            }
+            m.active = false;
+          }
+          break;
+        }
       }
     }
+
+    return burst;
   }
 
   takeDamage(amount: number): boolean {
