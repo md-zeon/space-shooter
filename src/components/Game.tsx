@@ -84,9 +84,20 @@ export default function Game() {
     updateCanvasSize();
 
     window.addEventListener('resize', updateCanvasSize);
+    // Re-lay the canvas whenever fullscreen toggles. Entering/leaving the
+    // Fullscreen API changes the viewport, and without re-running the layout
+    // the canvas can sit letterboxed/offset so on-canvas taps (like the
+    // top-right Pause button) map to the wrong place and appear to "do nothing."
+    const onFullscreenChange = () => updateCanvasSize();
+    document.addEventListener('fullscreenchange', onFullscreenChange);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    document.addEventListener('webkitfullscreenchange', onFullscreenChange as any);
 
     return () => {
       window.removeEventListener('resize', updateCanvasSize);
+      document.removeEventListener('fullscreenchange', onFullscreenChange);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      document.removeEventListener('webkitfullscreenchange', onFullscreenChange as any);
       engine.destroy();
       engineRef.current = null;
     };
