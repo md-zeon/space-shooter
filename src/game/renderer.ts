@@ -30,7 +30,6 @@ export class Renderer {
   private helpOpen: boolean = false;
   private soundOn: boolean = true;
   private statsOpen: boolean = false;
-  private isFullscreen: boolean = false;
   private autoBomb: boolean = true;
 
   setSoundOn(on: boolean) { this.soundOn = on; }
@@ -38,7 +37,6 @@ export class Renderer {
   isHelpOpen(): boolean { return this.helpOpen; }
   setStatsOpen(open: boolean) { this.statsOpen = open; }
   isStatsOpen(): boolean { return this.statsOpen; }
-  setFullscreen(on: boolean) { this.isFullscreen = on; }
   setAutoBomb(on: boolean) { this.autoBomb = on; }
 
   init(canvasWidth: number, canvasHeight: number) {
@@ -706,14 +704,9 @@ export class Renderer {
     this.drawMenuItem(ctx, 'RESUME', this.canvasWidth / 2 - itemWidth / 2, startY, itemWidth, itemHeight);
     this.drawMenuItem(ctx, 'RESTART', this.canvasWidth / 2 - itemWidth / 2, startY + itemHeight + gap, itemWidth, itemHeight);
     this.drawMenuItem(ctx, 'EXIT', this.canvasWidth / 2 - itemWidth / 2, startY + (itemHeight + gap) * 2, itemWidth, itemHeight);
-    this.drawMenuItem(ctx, this.fullscreenLabel(), this.canvasWidth / 2 - itemWidth / 2, startY + (itemHeight + gap) * 3, itemWidth, itemHeight);
-    this.drawMenuItem(ctx, this.autoBombLabel(), this.canvasWidth / 2 - itemWidth / 2, startY + (itemHeight + gap) * 4, itemWidth, itemHeight);
+    this.drawMenuItem(ctx, this.autoBombLabel(), this.canvasWidth / 2 - itemWidth / 2, startY + (itemHeight + gap) * 3, itemWidth, itemHeight);
 
     ctx.restore();
-  }
-
-  private fullscreenLabel(): string {
-    return this.isFullscreen ? 'FULLSCREEN: ON' : 'FULLSCREEN: OFF';
   }
 
   private autoBombLabel(): string {

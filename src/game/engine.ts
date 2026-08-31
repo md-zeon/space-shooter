@@ -113,25 +113,13 @@ export class GameEngine {
     this.audio.startMenuMusic();
 
     this.lastTime = performance.now();
-    window.addEventListener('fullscreenchange', this.syncFullscreenState);
     this.loop(this.lastTime);
   }
 
   destroy() {
     this.input.destroy();
-    window.removeEventListener('fullscreenchange', this.syncFullscreenState);
     cancelAnimationFrame(this.animationId);
   }
-
-  /** Keep the pause-menu FULLSCREEN label in sync with the real DOM state. */
-  private syncFullscreenState = () => {
-    const active = Boolean(
-      document.fullscreenElement ||
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (document as any).webkitFullscreenElement
-    );
-    this.renderer.setFullscreen(active);
-  };
 
   private loop = (currentTime: number) => {
     const deltaTime = Math.min((currentTime - this.lastTime) / 1000, 0.1);
@@ -256,7 +244,6 @@ export class GameEngine {
           if (item?.id === 'RESUME') { this.audio.playUIConfirm(); this.state = 'playing'; }
           else if (item?.id === 'RESTART') { this.audio.playUIConfirm(); this.startGame(); }
           else if (item?.id === 'EXIT') { this.audio.playUIConfirm(); this.state = 'menu'; this.audio.startMenuMusic(); }
-          else if (item?.id.startsWith('FULLSCREEN')) { this.audio.playUIConfirm(); this.toggleFullscreen(); }
           else if (item?.id.startsWith('AUTO-BOMB')) { this.audio.playUIConfirm(); this.autoBomb = !this.autoBomb; this.renderer.setAutoBomb(this.autoBomb); this.saveSettings(); }
         }
         if (this.input.isKeyJustPressed('Escape')) { this.audio.playUIPause(); this.state = 'playing'; }
@@ -1146,63 +1133,7 @@ export class GameEngine {
     this.waves.reset();
     this.boss.clear();
     this.audio.resume();
-    this.requestFullscreen();
     this.waves.startNextWave(CONFIG.WIDTH);
-  }
-
-  /**
-   * Attempt true fullscreen on the Play gesture (desktop/Android browsers).
-   * The fullscreen API requires a direct user gesture; this is called from the
-   * user's Play tap/keypress. It is a harmless no-op on iPhone (no Fullscreen
-   * API) where PWA standalone already gives the immersive view.
-   */
-  private requestFullscreen() {
-    try {
-      const el = this.canvas;
-      if (!el) return;
-      const req = el.requestFullscreen?.call(el) ||
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (el as any).webkitRequestFullscreen?.call(el);
-      if (req && typeof req.catch === 'function') req.catch(() => {});
-    } catch {
-      // ignore — fullscreen is best-effort
-    }
-  }
-
-  /**
-   * Exit true fullscreen (Fullscreen API), best-effort like requestFullscreen.
-   * Used from the pause menu so players can leave immersive mode without Esc.
-   */
-  private exitFullscreen() {
-    try {
-      const exit = document.exitFullscreen?.call(document) ||
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (document as any).webkitExitFullscreen?.call(document);
-      if (exit && typeof exit.catch === 'function') exit.catch(() => {});
-    } catch {
-      // ignore — fullscreen is best-effort
-    }
-  }
-
-  /**
-   * Toggle true fullscreen from the pause menu. Callers (the React Shell)
-   * pass their own button handler for native gestures; this in-canvas handler
-   * supports desktop/keyboard players and the pause-menu FULLSCREEN item.
-   */
-  toggleFullscreen(): boolean {
-    const active = Boolean(
-      document.fullscreenElement ||
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (document as any).webkitFullscreenElement
-    );
-    if (active) {
-      this.exitFullscreen();
-      this.renderer.setFullscreen(false);
-    } else {
-      this.requestFullscreen();
-      this.renderer.setFullscreen(true);
-    }
-    return !active;
   }
 
   private gameOver() {
