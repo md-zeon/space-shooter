@@ -250,7 +250,7 @@ export class BossManager {
     }
   }
 
-  update(deltaTime: number, canvasWidth: number, playerX: number): BossBulletRequest[] {
+  update(deltaTime: number, canvasWidth: number, playerX: number, playerY: number): BossBulletRequest[] {
     if (!this.boss || !this.boss.active) return [];
     const requests: BossBulletRequest[] = [];
     const dt60 = deltaTime * 60;
@@ -258,7 +258,7 @@ export class BossManager {
     if (this.boss.dying) {
       this.boss.deathTimer += deltaTime * 1000;
       this.boss.flashTimer += deltaTime * 1000;
-      this.updateMinions(deltaTime, canvasWidth, playerX);
+      this.updateMinions(deltaTime, canvasWidth, playerX, playerY);
       return [];
     }
 
@@ -293,7 +293,7 @@ export class BossManager {
     this.updateMovement(deltaTime, canvasWidth, playerX, bossDef);
     requests.push(...this.updateAttacks(deltaTime, canvasWidth, playerX, bossDef));
     this.updateMinionSpawning(deltaTime);
-    requests.push(...this.updateMinions(deltaTime, canvasWidth, playerX));
+    requests.push(...this.updateMinions(deltaTime, canvasWidth, playerX, playerY));
 
     return requests;
   }
@@ -815,10 +815,11 @@ export class BossManager {
     });
   }
 
-  private updateMinions(deltaTime: number, canvasWidth: number, playerX: number): BossBulletRequest[] {
+  private updateMinions(deltaTime: number, canvasWidth: number, playerX: number, playerY: number): BossBulletRequest[] {
     if (!this.boss) return [];
     const dt60 = deltaTime * 60;
     const burst: BossBulletRequest[] = [];
+    const phase = this.boss.phase;
 
     for (let i = this.boss.minions.length - 1; i >= 0; i--) {
       const m = this.boss.minions[i];
@@ -833,12 +834,23 @@ export class BossManager {
         case 'basic':
           m.y += 1.5 * dt60;
           if (m.y > CONFIG.HEIGHT + 30) m.active = false;
+          // Sparse aimed shot — the grunt minion is a filler gunner that only
+          // threatens at higher phases.
+          if (phase >= 2 && m.patternTimer % 1800 < deltaTime * 1000) {
+            const angle = Math.atan2(playerY - (m.y + m.height / 2), playerX - (m.x + m.width / 2));
+            burst.push({ x: m.x + m.width / 2, y: m.y + m.height, angle, speed: 3.4, type: 'aimed' });
+          }
           break;
 
         case 'rusher':
           // Dive-rusher: descends fast from the top along its column (runs the walls).
           m.y += 5 * dt60;
           if (m.y > CONFIG.HEIGHT + 30) m.active = false;
+          // Phase 3: a rising tracer marks the dive — telegraphs the contact pass.
+          if (phase >= 3 && m.patternTimer % 1200 < deltaTime * 1000) {
+            const angle = Math.atan2(playerY - (m.y + m.height / 2), playerX - (m.x + m.width / 2));
+            burst.push({ x: m.x + m.width / 2, y: m.y + m.height, angle, speed: 5, type: 'straight' });
+          }
           break;
 
         case 'shooter': {
@@ -849,6 +861,15 @@ export class BossManager {
             m.x += Math.sin(m.patternTimer * 0.002) * 1;
           }
           m.x = Math.max(0, Math.min(canvasWidth - m.width, m.x));
+          // The shooter's whole job is fire: a telegraphing short spread aimed at
+          // the player, with cadence tightening as the boss phases up.
+          const interval = Math.max(1200, 2400 - phase * 350);
+          if (m.patternTimer % interval < deltaTime * 1000 && m.y >= targetY) {
+            const base = Math.atan2(playerY - (m.y + m.height / 2), playerX - (m.x + m.width / 2));
+            for (let s = -1; s <= 1; s++) {
+              burst.push({ x: m.x + m.width / 2, y: m.y + m.height, angle: base + s * 0.28, speed: 3.6, type: 'burst' });
+            }
+          }
           break;
         }
 
@@ -872,6 +893,11 @@ export class BossManager {
           m.x += Math.sign(diff) * Math.min(Math.abs(diff) * 0.02, 2 * dt60);
           m.y += 1.6 * dt60;
           if (m.y > CONFIG.HEIGHT + 30) m.active = false;
+          // Light flanking tracer as it homes — keeps pressure without overloading.
+          if (phase >= 2 && m.patternTimer % 2200 < deltaTime * 1000) {
+            const angle = Math.atan2(playerY - (m.y + m.height / 2), playerX - (m.x + m.width / 2));
+            burst.push({ x: m.x + m.width / 2, y: m.y + m.height, angle, speed: 3.2, type: 'straight' });
+          }
           break;
         }
 
@@ -915,6 +941,11 @@ export class BossManager {
             const diff = playerX - mc;
             m.x += Math.sign(diff) * 2.4 * dt60;
             m.y += 4 * dt60;
+            // A short aimed flechette as it commits to the lunge.
+            if (m.patternTimer % 700 < deltaTime * 1000) {
+              const angle = Math.atan2(playerY - (m.y + m.height / 2), playerX - (m.x + m.width / 2));
+              burst.push({ x: m.x + m.width / 2, y: m.y + m.height, angle, speed: 3.8, type: 'aimed' });
+            }
             if (m.y > CONFIG.HEIGHT + 30) m.active = false;
           }
           break;
@@ -939,6 +970,15 @@ export class BossManager {
           if (m.y < targetY) m.y += 0.8 * dt60;
           m.x += Math.sin(m.patternTimer * 0.0015) * 1;
           m.x = Math.max(0, Math.min(canvasWidth - m.width, m.x));
+          // A short aimed shot on a telegraphing cadence — its fire keeps the
+          // gravity pull from being purely passive.
+          if (m.y >= targetY) {
+            const interval = Math.max(1400, 2600 - phase * 400);
+            if (m.patternTimer % interval < deltaTime * 1000) {
+              const base = Math.atan2(playerY - (m.y + m.height / 2), playerX - (m.x + m.width / 2));
+              burst.push({ x: m.x + m.width / 2, y: m.y + m.height, angle: base, speed: 4, type: 'aimed' });
+            }
+          }
           break;
         }
 
@@ -975,6 +1015,11 @@ export class BossManager {
           // away template - never random.
           m.y += 1.4 * dt60;
           m.x = Math.max(0, Math.min(canvasWidth - m.width, m.x + Math.sin(m.patternTimer * 0.003) * 0.6));
+          // The light shot its comment promises: a single aimed round on a cadence.
+          if (m.y > 30 && m.patternTimer % 1600 < deltaTime * 1000) {
+            const angle = Math.atan2(playerY - (m.y + m.height / 2), playerX - (m.x + m.width / 2));
+            burst.push({ x: m.x + m.width / 2, y: m.y + m.height, angle, speed: 3.6, type: 'aimed' });
+          }
           if (m.y > CONFIG.HEIGHT + 30) m.active = false;
           break;
         }

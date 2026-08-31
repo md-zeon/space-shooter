@@ -39,6 +39,8 @@ export interface Enemy {
   reflectTimer: number;
   healTimer: number;
   enterTimer: number;
+  hasTakenDamage: boolean;
+  barTimer: number;
 }
 
 /** A tile of an enemy that must be stripped (shield/armor) before core damage. */
@@ -106,7 +108,7 @@ export class EnemyManager {
     // later waves genuinely take more hits — otherwise a maxed player one-shots
     // everything and later waves feel EASIER, not harder.
     const baseHealth = isWall ? 3 : type === 'elite' ? 4 : type === 'leader' ? 4 : type === 'advanced' ? 2 : type === 'mirror' ? 2 : type === 'healer' ? 1 : isSplinterer ? 1 : isAttractor ? 3 : isTerrain ? 3 : isTurret ? 2 : isReflector ? 2 : 1;
-    const health = hp ?? Math.max(1, Math.round(baseHealth * (1 + this.difficulty * 0.08)));
+    const health = hp ?? Math.max(1, Math.round(baseHealth * (1 + Math.max(0, this.difficulty - 1) * 0.13)));
     this.enemies.push({
       x, y,
       width: isWall ? 30 : isAttractor ? 40 : isTerrain ? 38 : type === 'elite' ? 35 : type === 'leader' ? 35 : isRusher ? 26 : isHomer ? 26 : CONFIG.ENEMY_WIDTH,
@@ -145,6 +147,8 @@ export class EnemyManager {
       // Warp-in telegraph: enemies fade/scalem-in over a short ramp so they
       // never pop into existence with zero cue ("out of thin air").
       enterTimer: 260,
+      hasTakenDamage: false,
+      barTimer: 0,
     });
 
     if (formationId >= 0 && !this.formationOrigins.has(formationId)) {
@@ -287,6 +291,23 @@ export class EnemyManager {
         origin.y += speed;
     }
 
+    // Loop descending formations back to the top so a pass that wasn't destroyed
+    // circles around instead of silently despawning off the bottom edge (waves
+    // only advance once EVERY enemy is destroyed — see countAlive). Parking /
+    // rising patterns (hover, reposition, support, ambush, teleport) manage their
+    // own entry/retreat and are intentionally excluded.
+    if (
+      origin.y > CONFIG.HEIGHT + 80 &&
+      origin.movementPattern !== 'hover' &&
+      origin.movementPattern !== 'reposition' &&
+      origin.movementPattern !== 'support' &&
+      origin.movementPattern !== 'ambush' &&
+      origin.movementPattern !== 'teleport'
+    ) {
+      origin.y = -160;
+      origin.patternTimer = 0;
+    }
+
     if (origin.movementPattern === 'hover' || origin.movementPattern === 'reposition' || origin.movementPattern === 'zigzag') {
       if (origin.x < 10) origin.x = 10;
       if (origin.x > origin.canvasWidth - 90) origin.x = origin.canvasWidth - 90;
@@ -322,6 +343,7 @@ export class EnemyManager {
       enemy.shootTimer += deltaTime * 1000;
       if (enemy.flashTimer > 0) enemy.flashTimer -= deltaTime * 1000;
       if (enemy.enterTimer > 0) enemy.enterTimer -= deltaTime * 1000;
+      if (enemy.barTimer > 0) enemy.barTimer -= deltaTime * 1000;
 
       if (enemy.formationId >= 0) {
         const origin = this.formationOrigins.get(enemy.formationId);
@@ -388,8 +410,14 @@ export class EnemyManager {
               enemy.x = 30 + Math.random() * (canvasWidth - 60);
               enemy.patternTimer = 0;
               enemy.flashTimer = 300;
+              // Warp-in animation: re-trigger the ring cue and hold a ghost
+              // telegraph (non-hittable) while it fades in, so it never blinks
+              // in as a fully-formed threat with no entrance.
+              enemy.enterTimer = 500;
+              enemy.telegraphing = true;
             }
             enemy.y += speed * 0.4;
+            if (enemy.enterTimer <= 0) enemy.telegraphing = false;
             break;
           }
 
@@ -613,7 +641,16 @@ export class EnemyManager {
       const requests = this.checkShoot(enemy, canvasWidth, canvasHeight);
       if (requests) bulletRequests.push(...requests);
 
-      if (enemy.y > canvasHeight + enemy.height) {
+      // No enemy silently vanishes off the bottom edge: free-flying enemies that
+      // descend (straight/sine/zigzag/rusher/homer/swoop) loop back to the top and
+      // keep executing their pattern until the player destroys them. Only parked /
+      // static emplacements (walls, terrain, turrets, reflectors, attractors,
+      // supports) are exempt — they legitimately expire via their own lifecycle.
+      if (enemy.y > canvasHeight + enemy.height && this.isLoopingPattern(enemy)) {
+        enemy.y = -enemy.height - 8 - Math.random() * 30;
+        enemy.x = Math.max(0, Math.min(canvasWidth - enemy.width, enemy.x));
+        enemy.enterTimer = 260;
+      } else if (enemy.y > canvasHeight + enemy.height) {
         this.remove(enemy);
       }
     }
@@ -678,6 +715,27 @@ export class EnemyManager {
     }
   }
 
+  /**
+   * True for free-flying enemies that descend and should loop back to the top
+   * rather than despawn off the bottom. Static/parking emplacements return false.
+   */
+  private isLoopingPattern(enemy: Enemy): boolean {
+    switch (enemy.movementPattern) {
+      case 'wall':
+      case 'wallRhythm':
+      case 'hover':
+      case 'reposition':
+      case 'support':
+      case 'terrain':
+      case 'turret':
+      case 'reflector':
+      case 'attractor':
+        return false;
+      default:
+        return true;
+    }
+  }
+
   private checkShoot(enemy: Enemy, canvasWidth: number, canvasHeight: number): EnemyBulletRequest[] | null {
     if (enemy.hidden || enemy.telegraphing) return null;
     const requests: EnemyBulletRequest[] = [];
@@ -686,7 +744,7 @@ export class EnemyManager {
 
     switch (enemy.shootPattern) {
       case 'straight': {
-        const interval = Math.max(1500, 3500 - this.difficulty * 150);
+        const interval = Math.max(1000, 3500 - this.difficulty * 170);
         if (enemy.shootTimer >= interval) {
           enemy.shootTimer = 0;
           requests.push({ x: cx, y: cy, angle: Math.PI / 2, type: 'straight' });
@@ -695,7 +753,7 @@ export class EnemyManager {
       }
 
       case 'aimed': {
-        const interval = Math.max(1200, 2500 - this.difficulty * 100);
+        const interval = Math.max(1000, 2500 - this.difficulty * 110);
         if (enemy.shootTimer >= interval) {
           enemy.shootTimer = 0;
           const angle = Math.atan2(this.playerY - cy, this.playerX - cx);
@@ -705,7 +763,7 @@ export class EnemyManager {
       }
 
       case 'spread3': {
-        const interval = Math.max(1000, 2200 - this.difficulty * 100);
+        const interval = Math.max(850, 2200 - this.difficulty * 110);
         if (enemy.shootTimer >= interval) {
           enemy.shootTimer = 0;
           for (let i = -1; i <= 1; i++) {
@@ -716,7 +774,7 @@ export class EnemyManager {
       }
 
       case 'spread5': {
-        const interval = Math.max(1200, 2500 - this.difficulty * 100);
+        const interval = Math.max(1000, 2500 - this.difficulty * 110);
         if (enemy.shootTimer >= interval) {
           enemy.shootTimer = 0;
           for (let i = -2; i <= 2; i++) {
@@ -727,7 +785,7 @@ export class EnemyManager {
       }
 
       case 'radial': {
-        const interval = Math.max(2000, 4000 - this.difficulty * 150);
+        const interval = Math.max(1600, 4000 - this.difficulty * 160);
         if (enemy.shootTimer >= interval) {
           enemy.shootTimer = 0;
           const count = 8 + this.difficulty;
@@ -751,7 +809,7 @@ export class EnemyManager {
       }
 
       case 'burst3': {
-        const interval = Math.max(1500, 3000 - this.difficulty * 100);
+        const interval = Math.max(1200, 3000 - this.difficulty * 110);
         if (enemy.shootTimer >= interval) {
           enemy.shootTimer = 0;
           const baseAngle = Math.atan2(this.playerY - cy, this.playerX - cx);
@@ -762,6 +820,13 @@ export class EnemyManager {
         }
         break;
       }
+    }
+
+    // Late-wave escalation: enemy bullets travel faster as difficulty climbs so
+    // the game keeps getting harder instead of flat-lining at early-wave speed.
+    const speedScale = 1 + Math.min(0.8, Math.max(0, this.difficulty - 1) * 0.022);
+    for (const r of requests) {
+      r.speed = Math.min(CONFIG.ENEMY_BULLET_SPEED * speedScale, 6.8);
     }
 
     return requests.length > 0 ? requests : null;
@@ -787,11 +852,15 @@ export class EnemyManager {
     if (enemy.shieldHp > 0) {
       enemy.shieldHp -= amount;
       enemy.flashTimer = 100;
+      enemy.hasTakenDamage = true;
+      enemy.barTimer = 700;
       if (enemy.shieldHp <= 0) enemy.shieldHp = 0;
       return false;
     }
     enemy.health -= amount;
     enemy.flashTimer = 100;
+    enemy.hasTakenDamage = true;
+    enemy.barTimer = 700;
     if (enemy.health <= 0) {
       this.remove(enemy);
       return true;
@@ -839,6 +908,8 @@ export class EnemyManager {
         reflectTimer: 0,
         healTimer: 0,
         enterTimer: 200,
+        hasTakenDamage: false,
+        barTimer: 0,
       };
       this.enemies.push(copy);
     }
@@ -848,7 +919,16 @@ export class EnemyManager {
   render(ctx: CanvasRenderingContext2D) {
     for (const enemy of this.enemies) {
       if (!enemy.active) continue;
-      if (enemy.hidden) continue;
+      if (enemy.hidden) {
+        // A faint ghost keeps the player aware something is here even while a
+        // teleporter is between reveals — never a void-then-pop materialization.
+        ctx.save();
+        ctx.globalAlpha = 0.08;
+        ctx.fillStyle = CONFIG.COLORS.ENEMY_TELEPORTER;
+        ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
+        ctx.restore();
+        continue;
+      }
 
       ctx.save();
 
@@ -1338,16 +1418,22 @@ export class EnemyManager {
         ctx.fill();
       }
 
-      if (enemy.maxHealth > 1) {
+      // Health bar shows ONLY once the enemy has been damaged (and still has HP
+      // left), fading out a moment after the last hit — it never clutters the
+      // field with full, undamaged bars at spawn.
+      if (enemy.maxHealth > 1 && enemy.hasTakenDamage && enemy.health > 0 && enemy.barTimer > 0) {
         const barWidth = enemy.width * 0.8;
         const barHeight = 3;
         const barX = centerX - barWidth / 2;
         const barY = enemy.y - 6;
 
+        ctx.save();
+        ctx.globalAlpha = Math.min(1, enemy.barTimer / 250);
         ctx.fillStyle = '#1A1D2E';
         ctx.fillRect(barX, barY, barWidth, barHeight);
         ctx.fillStyle = CONFIG.COLORS.HP_BAR_FILL;
         ctx.fillRect(barX, barY, barWidth * (enemy.health / enemy.maxHealth), barHeight);
+        ctx.restore();
       }
 
       // Shield ring: visible while a shield is up — it must be stripped first.

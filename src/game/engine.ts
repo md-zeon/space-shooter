@@ -530,7 +530,7 @@ export class GameEngine {
 
   private updateBoss(deltaTime: number) {
     if (this.boss.isBossActive()) {
-      const requests = this.boss.update(deltaTime, CONFIG.WIDTH, this.player.x + this.player.width / 2);
+      const requests = this.boss.update(deltaTime, CONFIG.WIDTH, this.player.x + this.player.width / 2, this.player.y + this.player.height / 2);
       for (const req of requests) {
         this.bullets.acquireAngled(req.x, req.y, req.angle, req.speed, req.type);
       }
@@ -874,13 +874,15 @@ export class GameEngine {
       this.score += CONFIG.SCORE_PER_ENEMY * 6 * chainMultiplier;
     }
 
-    if (enemy.type === 'elite') {
+    if (enemy.type === 'elite' || enemy.type === 'leader') {
       this.audio.playExplosion();
-      this.particles.emitExplosion(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, 1.5);
     } else {
       this.audio.playExplosionSmall();
-      this.particles.emitExplosion(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2, 0.8);
     }
+    // Type-specific death VFX: each archetype dies with a recognizable signature
+    // (shards for mirrors/homers, speed-lines for rushers, blink-out for
+    // teleporters, debris for terrain/walls, etc.).
+    this.particles.emitTypeDeath(enemy.type || 'basic', enemy.x + enemy.width / 2, enemy.y + enemy.height / 2);
 
     // Splinterer: kills are NOT safe — death sprays 4 fast shrapnel shards.
     // Once aiming is unlocked (later in decade 3) the shards home at the player,
