@@ -81,6 +81,19 @@ export class BulletPool {
   }
 
   acquireAngled(x: number, y: number, angle: number, speed?: number, type?: string): Bullet {
+    // Cap enemy bullets on screen. When at capacity, skip spawning rather than
+    // growing the pool unbounded — the most visually dense patterns (the boss
+    // "sun" shockwave) must never tank mobile frame rate.
+    if (this.active.length >= CONFIG.MAX_ENEMY_BULLETS) {
+      // Hand back an inactive bullet so callers (which ignore the return value)
+      // stay simple; inactive bullets are skipped everywhere.
+      let bullet = this.pool.pop();
+      if (!bullet) bullet = this.create();
+      bullet.isPlayer = false;
+      bullet.active = false;
+      return bullet;
+    }
+
     let bullet = this.pool.pop();
     if (!bullet) {
       bullet = this.create();

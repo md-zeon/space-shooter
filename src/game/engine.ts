@@ -1380,41 +1380,64 @@ export class GameEngine {
     this.renderer.renderDeadZone(ctx);
 
     const bullets = this.bullets.getActive();
+    // Player bullets keep a light shadow glow (they are few). Enemy bullets avoid
+    // per-bullet shadowBlur — canvas shadow rasterization is the single most
+    // expensive draw op on mobile GPUs, and dense boss patterns (the "sun"
+    // shockwave) can stack hundreds of enemy bullets. A cheap expanded halo fill
+    // reads almost identically without the hang.
     ctx.save();
     for (const bullet of bullets) {
       if (!bullet.active) continue;
-      ctx.save();
+
+      if (bullet.isPlayer) {
+        ctx.fillStyle = CONFIG.COLORS.BULLET_PLAYER;
+        ctx.shadowColor = CONFIG.COLORS.BULLET_PLAYER;
+        ctx.shadowBlur = 8;
+        ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
+        ctx.shadowBlur = 0;
+        continue;
+      }
 
       let color: string;
-      if (bullet.isPlayer) {
-        color = CONFIG.COLORS.BULLET_PLAYER;
-        ctx.shadowBlur = 8;
-        ctx.fillStyle = color;
-        ctx.shadowColor = color;
-        ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
-      } else {
-        switch (bullet.bulletType) {
-          case 'aimed': color = CONFIG.COLORS.BULLET_ENEMY_AIMED; break;
-          case 'spiral': color = CONFIG.COLORS.BULLET_ENEMY_SPIRAL; break;
-          case 'laser': color = CONFIG.COLORS.BULLET_ENEMY_LASER; break;
-          case 'shockwave': color = CONFIG.COLORS.BULLET_ENEMY_SHOCKWAVE; break;
-          case 'soundwave': color = CONFIG.COLORS.BULLET_ENEMY_SOUNDWAVE; break;
-          default: color = CONFIG.COLORS.BULLET_ENEMY; break;
-        }
+      switch (bullet.bulletType) {
+        case 'aimed': color = CONFIG.COLORS.BULLET_ENEMY_AIMED; break;
+        case 'spiral': color = CONFIG.COLORS.BULLET_ENEMY_SPIRAL; break;
+        case 'laser': color = CONFIG.COLORS.BULLET_ENEMY_LASER; break;
+        case 'shockwave': color = CONFIG.COLORS.BULLET_ENEMY_SHOCKWAVE; break;
+        case 'soundwave': color = CONFIG.COLORS.BULLET_ENEMY_SOUNDWAVE; break;
+        default: color = CONFIG.COLORS.BULLET_ENEMY; break;
+      }
 
-        // Trail effect
+      if (bullet.bulletType === 'shockwave') {
+        // Cheap halo (two arcs) — no shadowBlur = mobile-friendly.
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        ctx.arc(bullet.x + bullet.width / 2, bullet.y + bullet.height / 2, bullet.width, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 0.4;
+        ctx.beginPath();
+        ctx.arc(bullet.x + bullet.width / 2, bullet.y + bullet.height / 2, bullet.width * 1.7, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      } else if (bullet.bulletType === 'soundwave') {
+        // Wide pulse wall with a bright leading edge.
+        ctx.fillStyle = color;
+        ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
+        ctx.fillRect(bullet.x, bullet.y, bullet.width, 3);
+      } else {
+        // Trail effect (cheap fills, no shadow).
         const trailLen = 10;
         const nx = bullet.vx !== 0 ? -bullet.vx : 0;
         const ny = bullet.vy !== 0 ? -bullet.vy : 1;
         const len = Math.sqrt(nx * nx + ny * ny) || 1;
         const dx = (nx / len) * 2;
         const dy = (ny / len) * 2;
-        ctx.globalAlpha = 0.3;
         ctx.fillStyle = color;
-        for (let t = 1; t <= 3; t++) {
-          ctx.globalAlpha = 0.15 / t;
-          const tw = bullet.width * (1 - t * 0.2);
-          const th = bullet.height * 0.5;
+        for (let t = 1; t <= 2; t++) {
+          ctx.globalAlpha = 0.14 / t;
+          const tw = bullet.width * (1 - t * 0.25);
+          const th = bullet.height * 0.45;
           ctx.fillRect(
             bullet.x + bullet.width / 2 - tw / 2 + dx * t * trailLen * 0.3,
             bullet.y + dy * t * trailLen * 0.3,
@@ -1423,42 +1446,18 @@ export class GameEngine {
         }
         ctx.globalAlpha = 1;
 
-        // Strong glow
-        ctx.shadowColor = color;
-        ctx.shadowBlur = 14;
+        // Glow halo + bright core.
+        ctx.globalAlpha = 0.35;
+        ctx.fillRect(bullet.x - 1, bullet.y - 1, bullet.width + 2, bullet.height + 2);
+        ctx.globalAlpha = 1;
         ctx.fillStyle = color;
-        if (bullet.bulletType === 'shockwave') {
-          ctx.beginPath();
-          ctx.arc(bullet.x + bullet.width / 2, bullet.y + bullet.height / 2, bullet.width / 2, 0, Math.PI * 2);
-          ctx.fill();
-
-          ctx.strokeStyle = color;
-          ctx.globalAlpha = 0.5;
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.arc(bullet.x + bullet.width / 2, bullet.y + bullet.height / 2, bullet.width, 0, Math.PI * 2);
-          ctx.stroke();
-          ctx.globalAlpha = 1;
-        } else if (bullet.bulletType === 'soundwave') {
-          // Wide pulse wall with a bright leading edge
-          ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
-          ctx.fillRect(bullet.x, bullet.y, bullet.width, 3);
-        } else {
-          ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
-        }
-
-        // White core for contrast
-        ctx.shadowBlur = 0;
-        if (bullet.bulletType !== 'shockwave' && bullet.bulletType !== 'soundwave') {
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-          ctx.fillRect(
-            bullet.x + 1, bullet.y + 1,
-            bullet.width - 2, bullet.height - 2
-          );
-        }
+        ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+        ctx.fillRect(
+          bullet.x + 1, bullet.y + 1,
+          bullet.width - 2, bullet.height - 2
+        );
       }
-      ctx.restore();
     }
     ctx.restore();
 

@@ -33,6 +33,10 @@ export const CONFIG = {
   ENEMY_BULLET_WIDTH: 6,
   ENEMY_BULLET_HEIGHT: 14,
   BULLET_TRAIL_LENGTH: 4,
+  // Hard ceiling on on-screen enemy bullets. The boss "sun" (shockwave) volley
+  // fires up to ~72 slow bullets that linger and stack; without a cap the active
+  // bullet array grows large enough to hang low-end phone GPUs (per-bullet draw).
+  MAX_ENEMY_BULLETS: 220,
 
   // Enemies
   ENEMY_SPAWN_RATE: 1000,
