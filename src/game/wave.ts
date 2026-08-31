@@ -230,6 +230,7 @@ function getMovementPattern(formation: FormationType, type: EnemyType): string {
   if (type === 'attractor') return 'attractor';
   if (type === 'terrain') return 'terrain';
   if (type === 'turret') return 'turret';
+  if (type === 'reflector') return 'reflector';
   switch (formation) {
     case 'line': return 'straight';
     case 'vshape': return 'straight';
@@ -249,6 +250,7 @@ function getShootPattern(type: EnemyType, difficulty: number): string {
   if (type === 'attractor') return 'none';
   if (type === 'terrain') return 'none';
   if (type === 'turret') return 'turret_aimed';
+  if (type === 'reflector') return 'none';
   if (type === 'healer') return 'none';
   if (type === 'leader') return difficulty >= 6 ? 'aimed' : 'spread3';
   if (difficulty <= 2) {
@@ -974,6 +976,94 @@ export class WaveManager {
       ], isBossWave: false, isBossPrep: true },
 
       // Wave 90 — BOSS: The Escort-Carrier (BossManager handles it).
+      { groups: [], isBossWave: true, isBossPrep: false },
+
+      // ===== Decade 10 (waves 91-100): the Undertaking =====
+      // The finale decade. New verb = FIRE DISCIPLINE: the reflector (bullet-
+      // reflector) makes bullets come BACK at you, so for the first time you must
+      // STOP shooting (or switch targets) during its reflect window. Plus the
+      // elite-census — every prior archetype returns, and the reflect-shields
+      // gate the TRUE final boss on wave 100.
+
+      // Wave 91 — Air/recovery: full census of ALL archetypes at light density
+      // (the gauntlet intro — a total recap).
+      { groups: [
+        { type: 'basic', formation: 'line', count: 5, movementPattern: 'swoop', shootPattern: 'none', delay: 0 },
+        { type: 'turret', formation: 'random', count: 1, movementPattern: 'turret', shootPattern: 'turret_aimed', delay: 400 },
+        { type: 'teleporter', formation: 'random', count: 1, movementPattern: 'teleporter', shootPattern: 'none', delay: 700 },
+        { type: 'terrain', formation: 'random', count: 1, movementPattern: 'terrain', shootPattern: 'none', delay: 900 },
+        { type: 'homer', formation: 'random', count: 1, movementPattern: 'homing', shootPattern: 'none', delay: 1200 },
+        { type: 'elite', formation: 'random', count: 1, movementPattern: 'straight', shootPattern: 'spread5', delay: 1500 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 92 — FIRST REFLECT-SHIELD: reflects bullets while its window is up.
+      // Kill early = lose the reflect risk; kill late = the down-phase reward.
+      { groups: [
+        { type: 'reflector', formation: 'random', count: 1, movementPattern: 'reflector', shootPattern: 'none', delay: 0 },
+        { type: 'basic', formation: 'line', count: 4, movementPattern: 'swoop', shootPattern: 'none', delay: 500 },
+        { type: 'advanced', formation: 'line', count: 2, movementPattern: 'straight', shootPattern: 'aimed', delay: 900 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 93 — Reflect + swarmers: the swarm keeps your cannon busy while a
+      // reflector looms — withhold fire under pressure.
+      { groups: [
+        { type: 'reflector', formation: 'random', count: 1, movementPattern: 'reflector', shootPattern: 'none', delay: 0 },
+        { type: 'rusher', formation: 'pincer', count: 4, movementPattern: 'rusher', shootPattern: 'none', delay: 400 },
+        { type: 'splinterer', formation: 'random', count: 2, movementPattern: 'straight', shootPattern: 'none', delay: 800 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 94 — Reflect + teleporter: a reflector that blinks — time the
+      // withholding to its reflect cycle.
+      { groups: [
+        { type: 'reflector', formation: 'random', count: 1, movementPattern: 'reflector', shootPattern: 'none', delay: 0 },
+        { type: 'teleporter', formation: 'random', count: 2, movementPattern: 'teleporter', shootPattern: 'none', delay: 500 },
+        { type: 'basic', formation: 'line', count: 4, movementPattern: 'straight', shootPattern: 'aimed', delay: 900 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 95 — Reflect + wall + gravity + terrain: four spatial verbs PLUS
+      // fire discipline — total re-synthesis.
+      { groups: [
+        { type: 'reflector', formation: 'random', count: 1, movementPattern: 'reflector', shootPattern: 'none', delay: 0 },
+        { type: 'terrain', formation: 'random', count: 1, movementPattern: 'terrain', shootPattern: 'none', delay: 300 },
+        { type: 'attractor', formation: 'random', count: 1, movementPattern: 'attractor', shootPattern: 'none', delay: 600 },
+        { type: 'basic', formation: 'line', count: 4, movementPattern: 'straight', shootPattern: 'aimed', delay: 900 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 96 — DOUBLE reflector bracket + a healer behind them: sequence your
+      // withholding AND your priority — heal the ladder.
+      { groups: [
+        { type: 'reflector', formation: 'random', count: 2, movementPattern: 'reflector', shootPattern: 'none', delay: 0 },
+        { type: 'healer', formation: 'random', count: 1, movementPattern: 'straight', shootPattern: 'none', delay: 600 },
+        { type: 'basic', formation: 'line', count: 4, movementPattern: 'swoop', shootPattern: 'none', delay: 900 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 97 — Refresh + elite census: every archetype re-presented hard —
+      // the final mid-decade gauntlet.
+      { groups: [
+        { type: 'reflector', formation: 'random', count: 1, movementPattern: 'reflector', shootPattern: 'none', delay: 0 },
+        { type: 'elite', formation: 'random', count: 2, movementPattern: 'straight', shootPattern: 'spread5', hp: 4, delay: 300 },
+        { type: 'turret', formation: 'random', count: 1, movementPattern: 'turret', shootPattern: 'turret_laser', delay: 600 },
+        { type: 'teleporter', formation: 'random', count: 1, movementPattern: 'teleporter', shootPattern: 'none', delay: 900 },
+        { type: 'rusher', formation: 'pincer', count: 3, movementPattern: 'rusher', shootPattern: 'none', delay: 1100 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 98 — Reflect walls gate the boss (the final gatekeeper): prove your
+      // fire discipline to unlock the true final fight.
+      { groups: [
+        { type: 'reflector', formation: 'random', count: 2, movementPattern: 'reflector', shootPattern: 'none', delay: 0 },
+        { type: 'terrain', formation: 'random', count: 1, movementPattern: 'terrain', shootPattern: 'none', delay: 500 },
+        { type: 'advanced', formation: 'pincer', count: 2, movementPattern: 'ambush', shootPattern: 'aimed', bottomEntry: true, delay: 1000 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 99 — Calm / pre-boss relief (the eye of the storm before the true
+      // final).
+      { groups: [
+        { type: 'reflector', formation: 'random', count: 1, movementPattern: 'reflector', shootPattern: 'none', delay: 0 },
+        { type: 'basic', formation: 'line', count: 3, movementPattern: 'straight', shootPattern: 'none', delay: 500 },
+      ], isBossWave: false, isBossPrep: true },
+
+      // Wave 100 — TRUE FINAL BOSS: The Emblem / Final Core (BossManager handles
+      // it — redefined as the small, fast, alive capstone at BOSS_DEFS index 9).
       { groups: [], isBossWave: true, isBossPrep: false },
     ];
 

@@ -136,10 +136,10 @@ const BOSS_DEFS: BossDef[] = [
     minionTypes: ['fleet'], minionCount: 2, minionInterval: 3200,
   },
   {
-    id: 'omega', name: 'OMEGA', width: 110, height: 80,
-    color: CONFIG.COLORS.BOSS_OMEGA, baseHp: 220, speed: 0.5, targetY: 50,
-    attacks: ['laser', 'ring', 'fan', 'soundwave'],
-    minionTypes: ['shield'], minionCount: 2, minionInterval: 7000,
+    id: 'omega', name: 'THE EMBLEM / FINAL CORE', width: 56, height: 56,
+    color: CONFIG.COLORS.BOSS_OMEGA, baseHp: 520, speed: 1.1, targetY: 40,
+    attacks: ['fan', 'aimed_stream', 'ring', 'laser', 'radial', 'spiral', 'soundwave', 'shockwave'],
+    minionTypes: ['fleet', 'shield'], minionCount: 2, minionInterval: 3000,
   },
   {
     id: 'abyss', name: 'ABYSS', width: 100, height: 100,
@@ -480,12 +480,23 @@ export class BossManager {
         }
         this.boss.y = this.boss.targetY + Math.sin(this.boss.moveTimer * 0.0012) * 4;
         break;
-      case 'omega':
-        if (this.boss.moveTimer > 5000) {
+      case 'omega': {
+        // The Emblem — the TRUE final boss. Deliberately SMALL, FAST, ALIVE:
+        // the anti-fortress. It darts after the player on X (faster than the
+        // mech), an "alive" core that reads against every big machine before it.
+        if (this.boss.moveTimer > 3800) {
           this.boss.moveTimer = 0;
-          this.boss.targetX = canvasWidth / 2 - this.boss.width / 2 + (Math.random() - 0.5) * 60;
+          this.boss.targetX = canvasWidth / 2 - this.boss.width / 2 + (Math.random() - 0.5) * CONFIG.WIDTH * 0.7;
         }
+        const chaseStrength = this.boss.phase >= 3 ? 0.11 : this.boss.phase === 2 ? 0.09 : 0.07;
+        const ecx = this.boss.x + this.boss.width / 2;
+        const edx = playerX - ecx;
+        const step = Math.sign(edx) * Math.min(Math.abs(edx) * chaseStrength, 5 * dt60);
+        this.boss.x += step;
+        // Alive twitch on Y — never settles.
+        this.boss.y = this.boss.targetY + Math.sin(this.boss.moveTimer * 0.006) * 10 + Math.sin(this.boss.moveTimer * 0.02) * 2;
         break;
+      }
       case 'abyss': {
         const orbitSpeed = 0.001;
         const angle = this.boss.moveTimer * orbitSpeed;

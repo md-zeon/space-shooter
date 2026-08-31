@@ -1,6 +1,6 @@
 import { CONFIG } from './config';
 
-export type EnemyType = 'basic' | 'advanced' | 'elite' | 'wall' | 'splinterer' | 'rusher' | 'homer' | 'mirror' | 'mirrorcopy' | 'healer' | 'leader' | 'teleporter' | 'attractor' | 'terrain' | 'turret';
+export type EnemyType = 'basic' | 'advanced' | 'elite' | 'wall' | 'splinterer' | 'rusher' | 'homer' | 'mirror' | 'mirrorcopy' | 'healer' | 'leader' | 'teleporter' | 'attractor' | 'terrain' | 'turret' | 'reflector';
 
 export interface Enemy {
   x: number;
@@ -35,6 +35,8 @@ export interface Enemy {
   lifespan: number;
   charging: boolean;
   chargeTimer: number;
+  reflecting: boolean;
+  reflectTimer: number;
 }
 
 /** A tile of an enemy that must be stripped (shield/armor) before core damage. */
@@ -96,7 +98,8 @@ export class EnemyManager {
     const isAttractor = type === 'attractor';
     const isTerrain = type === 'terrain';
     const isTurret = type === 'turret';
-    const health = hp ?? (isWall ? 3 : type === 'elite' ? 4 : type === 'leader' ? 4 : type === 'advanced' ? 2 : type === 'mirror' ? 2 : type === 'healer' ? 1 : isSplinterer ? 1 : isAttractor ? 3 : isTerrain ? 3 : isTurret ? 2 : 1);
+    const isReflector = type === 'reflector';
+    const health = hp ?? (isWall ? 3 : type === 'elite' ? 4 : type === 'leader' ? 4 : type === 'advanced' ? 2 : type === 'mirror' ? 2 : type === 'healer' ? 1 : isSplinterer ? 1 : isAttractor ? 3 : isTerrain ? 3 : isTurret ? 2 : isReflector ? 2 : 1);
     this.enemies.push({
       x, y,
       width: isWall ? 30 : isAttractor ? 40 : isTerrain ? 38 : type === 'elite' ? 35 : type === 'leader' ? 35 : isRusher ? 26 : isHomer ? 26 : CONFIG.ENEMY_WIDTH,
@@ -129,6 +132,8 @@ export class EnemyManager {
       lifespan: indestructible ? 9000 : -1,
       charging: false,
       chargeTimer: 0,
+      reflecting: isReflector && Math.random() < 0.5,
+      reflectTimer: Math.random() * 2600,
     });
 
     if (formationId >= 0 && !this.formationOrigins.has(formationId)) {
@@ -560,6 +565,28 @@ export class EnemyManager {
             break;
           }
 
+          case 'reflector': {
+            // D10 bullet-reflector: descends to a floating hover and pulses a
+            // REFLECT WINDOW on/off. While reflecting, player bullets aimed at it
+            // are RETURNED as enemy bullets — the player must stop shooting (or
+            // switch targets) during the window: the fire-discipline verb. Reflecting
+            // enemies are invulnerable while the window is up (kill them in the gap
+            // = lose the reflect risk; killing late is the down-phase reward).
+            const targetY = 40 + (Math.min(enemy.originX, CONFIG.WIDTH - enemy.width) / CONFIG.WIDTH) * 120;
+            if (enemy.y < targetY) {
+              enemy.y += speed * 0.8;
+            } else {
+              // Gentle hover; drive the reflect window cycle.
+              enemy.y += Math.sin(enemy.patternTimer * 0.001) * 0.5;
+              enemy.reflectTimer += deltaTime * 1000;
+              const cycle = 2200;
+              const reflectOnMs = 1200;
+              const t = enemy.reflectTimer % cycle;
+              enemy.reflecting = t < reflectOnMs;
+            }
+            break;
+          }
+
           default:
             enemy.y += speed;
         }
@@ -792,6 +819,8 @@ export class EnemyManager {
         lifespan: -1,
         charging: false,
         chargeTimer: 0,
+        reflecting: false,
+        reflectTimer: 0,
       };
       this.enemies.push(copy);
     }
@@ -884,6 +913,10 @@ export class EnemyManager {
         case 'turret':
           color = CONFIG.COLORS.ENEMY_TURRET;
           shape = 'turret';
+          break;
+        case 'reflector':
+          color = enemy.reflecting ? CONFIG.COLORS.ENEMY_REFLECTOR_ACTIVE : CONFIG.COLORS.ENEMY_REFLECTOR;
+          shape = 'reflector';
           break;
       }
 
@@ -1039,6 +1072,39 @@ export class EnemyManager {
           ctx.fill();
           ctx.shadowBlur = 0;
         }
+      } else if (shape === 'reflector') {
+        // D10 bullet-reflector: a floating triangular mirror that PULSES a
+        // reflect field (a bright ring growing/shrinking). While REFLECTING it
+        // glows hot and is invulnerable — the player must withhold fire / switch
+        // targets. The dark gap in its cycle is the (only) safe window to strike.
+        const cp = (Math.sin(enemy.patternTimer * 0.01) + 1) / 2;
+        ctx.save();
+        ctx.translate(centerX, centerY);
+        ctx.shadowColor = color;
+        ctx.shadowBlur = enemy.reflecting ? 22 : 8;
+        ctx.beginPath();
+        ctx.moveTo(0, -enemy.height * 0.45);
+        ctx.lineTo(enemy.width * 0.5, enemy.height * 0.4);
+        ctx.lineTo(-enemy.width * 0.5, enemy.height * 0.4);
+        ctx.closePath();
+        ctx.fillStyle = color;
+        ctx.fill();
+        // Mirror eye that flares with the reflect window.
+        ctx.fillStyle = enemy.reflecting ? '#FFFFFF' : '#222A33';
+        ctx.shadowBlur = enemy.reflecting ? 18 : 0;
+        ctx.beginPath();
+        ctx.arc(0, 0, 7 + cp * 3, 0, Math.PI * 2);
+        ctx.fill();
+        // The reflect field ring — present only while active.
+        if (enemy.reflecting) {
+          ctx.strokeStyle = CONFIG.COLORS.ENEMY_REFLECTOR_ACTIVE;
+          ctx.globalAlpha = 0.5 + cp * 0.4;
+          ctx.beginPath();
+          ctx.arc(0, 0, enemy.width * (0.7 + cp * 0.2), 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+        }
+        ctx.restore();
       } else if (shape === 'splinterer') {
         // Spiky star/orb: fragile, ready to shatter and spray shards outward.
         const points = 8;

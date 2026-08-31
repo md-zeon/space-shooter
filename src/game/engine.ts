@@ -520,6 +520,8 @@ export class GameEngine {
     const enemies = this.enemies.getActive();
     for (const e of enemies) {
       if (!e.active) continue;
+      // A reflecting bullet-reflector shrugs off the beam's whole sweep.
+      if (e.type === 'reflector' && e.reflecting) continue;
       if (checkCollision(
         { x: lx, y: ly, width: lw, height: lh },
         { x: e.x, y: e.y, width: e.width, height: e.height }
@@ -572,6 +574,22 @@ export class GameEngine {
           { x: bullet.x, y: bullet.y, width: bullet.width, height: bullet.height },
           { x: enemy.x, y: enemy.y, width: enemy.width, height: enemy.height }
         )) {
+          // D10 bullet-reflector: while its reflect window is up, incoming player
+          // fire is RETURNED instead of dealing damage. This is the fire-
+          // discipline verb — you must STOP shooting (or switch targets) during
+          // the window, or your own reflected bullets kill you.
+          if (enemy.type === 'reflector' && enemy.reflecting) {
+            bullet.isPlayer = false;
+            bullet.bulletType = 'spread';
+            bullet.speed = CONFIG.ENEMY_BULLET_SPEED;
+            bullet.width = 6;
+            bullet.height = 6;
+            bullet.vy = Math.abs(bullet.vy) * -0.7;
+            bullet.vx = (Math.random() - 0.5) * 1.5;
+            this.audio.playEnemyHit();
+            break;
+          }
+
           const died = this.enemies.damageEnemy(enemy, 1);
           bullet.active = false;
           this.bullets.release(bullet);
@@ -1760,21 +1778,48 @@ export class GameEngine {
       }
 
       case 'omega': {
-        ctx.fillRect(boss.x, boss.y, boss.width, boss.height);
-
-        ctx.fillStyle = '#880000';
-        ctx.fillRect(boss.x + 5, boss.y + 5, boss.width - 10, boss.height - 10);
-
+        // The Emblem / Final Core — the TRUE final boss. Small, fast, ALIVE: a
+        // bright living core that reads against every big machine before it (the
+        // anti-fortress). A rotating emblem ring pulses around it as it darts.
         ctx.fillStyle = boss.color;
-        ctx.fillRect(boss.x + 15, boss.y + 15, boss.width - 30, boss.height - 30);
+        ctx.shadowColor = boss.color;
+        ctx.shadowBlur = 28;
+        // Rotating emblem ring (the "alive" halo).
+        const ringR = boss.width * (0.85 + Math.sin(boss.patternTimer * 0.01) * 0.08);
+        ctx.globalAlpha = 0.6 + Math.sin(boss.patternTimer * 0.02) * 0.2;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(cx, cy, ringR, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+        ctx.lineWidth = 1;
 
-        if (boss.phase >= 2) {
-          ctx.fillStyle = '#FF0000';
-          ctx.shadowColor = '#FF0000';
-          ctx.shadowBlur = 15;
+        // Central core (small, round, bright — the "emblem").
+        const coreR = boss.width * 0.34 + Math.sin(boss.patternTimer * 0.03) * 2;
+        ctx.beginPath();
+        ctx.arc(cx, cy, coreR, 0, Math.PI * 2);
+        ctx.fill();
+
+        // The living eye — always-open, pulsing white-hot (bares its core).
+        ctx.fillStyle = boss.phase >= 3 ? '#FFFFFF' : boss.phase === 2 ? '#FFE080' : '#8CD8FF';
+        ctx.shadowColor = ctx.fillStyle;
+        ctx.shadowBlur = 18 + Math.sin(boss.patternTimer * 0.02) * 6;
+        ctx.beginPath();
+        ctx.arc(cx, cy, boss.width * 0.16, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Spinning emblem spokes when enraged (phase 3+) — it "goes alive-er".
+        if (boss.phase >= 3) {
+          ctx.strokeStyle = '#FFFFFF';
+          ctx.globalAlpha = 0.8;
           ctx.beginPath();
-          ctx.arc(cx, cy, 8, 0, Math.PI * 2);
-          ctx.fill();
+          for (let i = 0; i < 4; i++) {
+            const a = boss.patternTimer * 0.008 + (i / 4) * Math.PI * 2;
+            ctx.moveTo(cx + Math.cos(a) * coreR, cy + Math.sin(a) * coreR);
+            ctx.lineTo(cx + Math.cos(a) * coreR * 1.9, cy + Math.sin(a) * coreR * 1.9);
+          }
+          ctx.stroke();
+          ctx.globalAlpha = 1;
         }
         break;
       }
@@ -2035,7 +2080,7 @@ export class GameEngine {
     ctx.fillStyle = boss.phase === 3 ? '#FF00FF' : boss.phase === 2 ? '#FF6600' : '#FFFFFF';
     ctx.shadowColor = ctx.fillStyle;
     ctx.shadowBlur = 12;
-    if (boss.bossId !== 'spider' && boss.bossId !== 'turrets' && boss.bossId !== 'statue' && boss.bossId !== 'shell' && boss.bossId !== 'fortress' && boss.bossId !== 'mech' && boss.bossId !== 'carrier') {
+    if (boss.bossId !== 'spider' && boss.bossId !== 'turrets' && boss.bossId !== 'statue' && boss.bossId !== 'shell' && boss.bossId !== 'fortress' && boss.bossId !== 'mech' && boss.bossId !== 'carrier' && boss.bossId !== 'omega') {
       ctx.beginPath();
       ctx.arc(cx, eyeY, boss.width * 0.08, 0, Math.PI * 2);
       ctx.fill();
