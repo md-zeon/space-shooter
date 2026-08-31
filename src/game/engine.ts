@@ -280,10 +280,18 @@ export class GameEngine {
   private updateWaveSpawning(deltaTime: number) {
     if (this.boss.isBossActive() || this.warningActive || this.bossDefeatTimer > 0) return;
 
-    const activeEnemyCount = this.enemies.countForSpawnCap();
-    if (activeEnemyCount >= 30) return;
+    const spawnCapCount = this.enemies.countForSpawnCap();
+    // Arena budget grows with difficulty so higher waves can field more enemies
+    // at once without the hard cap truncating a wave mid-spawn.
+    const spawnCap = CONFIG.MAX_ONSCREEN_ENEMIES + this.waves.getDifficulty() * 8;
+    if (spawnCapCount >= spawnCap) return;
 
-    const spawnCommands = this.waves.update(deltaTime, activeEnemyCount, CONFIG.WIDTH);
+    // The live-enemy census gates wave completion (next wave only after every
+    // current-wave enemy is gone). countAlive() includes all remaining actors
+    // so lingering enemies block the advance.
+    const liveEnemyCount = this.enemies.countAlive();
+
+    const spawnCommands = this.waves.update(deltaTime, liveEnemyCount, CONFIG.WIDTH);
 
     this.enemies.setDifficulty(this.waves.getDifficulty());
 

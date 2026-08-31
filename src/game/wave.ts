@@ -53,6 +53,21 @@ const FORMATION_POOL: FormationType[] = [
   'grid', 'circle', 'spiral', 'cross',
 ];
 
+/**
+ * Deterministic PRNG (mulberry32) so each wave's procedural composition is
+ * stable run-to-run — difficulty ramps smoothly instead of re-rolling spikes.
+ */
+function mulberry32(seed: number): () => number {
+  let a = seed >>> 0;
+  return function () {
+    a |= 0;
+    a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 function generateFormation(
   formation: FormationType,
   count: number,
@@ -1089,7 +1104,13 @@ export class WaveManager {
       }
 
       const groups: WaveGroup[] = [];
-      const numGroups = 1 + Math.floor(Math.random() * (tier + 1));
+      // Monotonic-difficulty budget: group + enemy counts GROW with the wave and
+      // only vary by a narrow band, so later waves are consistently harder rather
+      // than randomly easier/harder run-to-run. waveNum also feeds the RNG seed
+      // so each specific wave keeps its own stable identity.
+      const rng = mulberry32(waveNum * 7919);
+      const numGroups = 1 + Math.min(tier, 2) + (rng() < 0.6 ? 1 : 0);
+      const budget = 8 + Math.floor(waveNum * 0.18);
 
       for (let g = 0; g < numGroups; g++) {
         let type: EnemyType = 'basic';
@@ -1098,8 +1119,10 @@ export class WaveManager {
         else if (tier >= 1 && roll > 0.5) type = 'advanced';
 
         const maxFormationIndex = Math.min(FORMATION_POOL.length, 2 + tier * 2);
-        const formation = FORMATION_POOL[Math.floor(Math.random() * maxFormationIndex)];
-        const count = 3 + Math.floor(Math.random() * (3 + tier * 2));
+        const formation = FORMATION_POOL[Math.floor(rng() * maxFormationIndex)];
+        // Split the wave budget across its groups; the last group eats the rest.
+        const remaining = numGroups - g;
+        const count = Math.max(2, Math.round((budget / remaining) * (0.75 + rng() * 0.5)));
 
         groups.push({
           type,
@@ -1134,7 +1157,7 @@ export class WaveManager {
           speed,
           movementPattern: movement,
           shootPattern,
-          delay: (group.delay || 0) + i * 80,
+          delay: (group.delay || 0) + this.computeEntryStagger(group, positions.length, i),
           formationId,
           offsetX: positions[i].x - cx,
           offsetY: positions[i].y - cy,
@@ -1151,6 +1174,39 @@ export class WaveManager {
     }
 
     return commands;
+  }
+
+  /**
+   * Formation-aware entry stagger. Row-style formations (grid/diamond) release
+   * row-by-row so they read as a marching block; line/random/simple forms use a
+   * tighter per-unit cadence. This replaces the old flat `i * 80` that dumped an
+   * entire group into the arena in ~1.2s.
+   */
+  private computeEntryStagger(group: WaveGroup, total: number, index: number): number {
+    const rowTime = 400 + this.difficulty * 25;
+    const unitTime = 180 + this.difficulty * 15;
+
+    switch (group.formation) {
+      case 'grid': {
+        const cols = Math.min(total, 5);
+        const row = Math.floor(index / cols);
+        return index * unitTime * 0.5 + row * rowTime * 0.7;
+      }
+      case 'diamond': {
+        // Center-out: the outer tips of the diamond enter last.
+        const half = Math.floor(total / 2);
+        const depth = Math.abs(index - (index < half ? 0 : total - 1 - index));
+        return depth * unitTime;
+      }
+      case 'vshape':
+      case 'pincer':
+      case 'cross':
+        return index * unitTime;
+      case 'line':
+      case 'random':
+      default:
+        return index * unitTime * 0.5;
+    }
   }
 
   update(
@@ -1173,14 +1229,29 @@ export class WaveManager {
     }
 
     this.spawnDelay -= Math.min(deltaTime * 1000, 100);
-    while (this.pendingSpawns.length > 0 && this.spawnDelay <= 0) {
+    // Per-frame release budget: even when many commands are ready, only a few
+    // are issued per tick so a large wave filters in across several frames
+    // instead of bursting onto screen all at once. Surplus carries to later ticks.
+    let releaseBudget = 5;
+    while (this.pendingSpawns.length > 0 && this.spawnDelay <= 0 && releaseBudget > 0) {
       if (this.nextSpawnTime > -this.spawnDelay) break;
       const cmd = this.pendingSpawns.shift()!;
       newSpawns.push(cmd);
       this.nextSpawnTime += Math.max(cmd.delay, 50);
+      releaseBudget--;
     }
 
-    if (this.pendingSpawns.length === 0 && newSpawns.length === 0 && !this.betweenWaves) {
+    // The wave is only "cleared" once every spawn command has been issued AND
+    // every spawned enemy is gone. Before, this advanced as soon as the last
+    // spawn command left the queue — letting the next wave start while enemies
+    // from the current wave were still alive (or flying off without being shot).
+    // `activeEnemyCount` is the live enemy census fed in by the engine.
+    if (
+      this.pendingSpawns.length === 0 &&
+      newSpawns.length === 0 &&
+      activeEnemyCount === 0 &&
+      !this.betweenWaves
+    ) {
       this.betweenWaves = true;
       this.betweenWaveTimer = 3000;
     }

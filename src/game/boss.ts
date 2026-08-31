@@ -75,6 +75,7 @@ interface BossDef {
   speed: number;
   targetY: number;
   attacks: BossAttackType[];
+  signature: BossAttackType;
   minionTypes: MinionType[];
   minionCount: number;
   minionInterval: number;
@@ -85,66 +86,77 @@ const BOSS_DEFS: BossDef[] = [
     id: 'cipher', name: 'CIPHER', width: 60, height: 60,
     color: CONFIG.COLORS.BOSS_CIPHER, baseHp: 80, speed: 2.5, targetY: 60,
     attacks: ['radial', 'aimed_stream', 'shockwave'],
+    signature: 'radial',
     minionTypes: ['basic'], minionCount: 2, minionInterval: 6000,
   },
   {
     id: 'spider', name: 'SPIDER', width: 90, height: 70,
     color: CONFIG.COLORS.BOSS_SPIDER, baseHp: 100, speed: 2.2, targetY: 55,
     attacks: ['aimed_stream', 'fan', 'radial', 'shockwave'],
+    signature: 'fan',
     minionTypes: ['rusher'], minionCount: 3, minionInterval: 4500,
   },
   {
     id: 'turrets', name: 'TURRET-CRUISER', width: 120, height: 80,
     color: CONFIG.COLORS.BOSS_TURRET, baseHp: 200, speed: 1.2, targetY: 50,
     attacks: ['fan', 'laser', 'shockwave', 'radial'],
+    signature: 'laser',
     minionTypes: ['shield', 'shooter'], minionCount: 3, minionInterval: 4000,
   },
   {
     id: 'statue', name: 'STATUE', width: 120, height: 100,
     color: CONFIG.COLORS.BOSS_STATUE, baseHp: 240, speed: 0.6, targetY: 55,
     attacks: ['laser', 'aimed_stream', 'fan', 'ring', 'shockwave', 'soundwave', 'crossfire'],
+    signature: 'crossfire',
     minionTypes: ['mirror'], minionCount: 2, minionInterval: 5000,
   },
   {
     id: 'creature', name: 'CREATURE', width: 150, height: 60,
     color: CONFIG.COLORS.BOSS_CREATURE, baseHp: 260, speed: 3.2, targetY: 50,
     attacks: ['aimed_stream', 'fan', 'laser', 'shockwave', 'radial'],
+    signature: 'shockwave',
     minionTypes: ['escort'], minionCount: 2, minionInterval: 6000,
   },
   {
     id: 'shell', name: 'SHELL', width: 150, height: 100,
     color: CONFIG.COLORS.BOSS_SHELL, baseHp: 320, speed: 2.4, targetY: 55,
     attacks: ['aimed_stream', 'fan', 'ring', 'laser', 'radial', 'snipe', 'shockwave'],
+    signature: 'snipe',
     minionTypes: ['aimer', 'mine'], minionCount: 2, minionInterval: 5000,
   },
   {
     id: 'fortress', name: 'FORTRESS', width: Math.floor(CONFIG.WIDTH * 0.9), height: 90,
     color: CONFIG.COLORS.BOSS_FORTRESS, baseHp: 380, speed: 0.3, targetY: 55,
     attacks: ['aimed_stream', 'fan', 'radial', 'charge', 'laser', 'soundwave'],
+    signature: 'charge',
     minionTypes: ['gturret', 'shooter', 'slot'], minionCount: 2, minionInterval: 7000,
   },
   {
     id: 'mech', name: 'ROCKET-SKATER', width: 92, height: 120,
     color: CONFIG.COLORS.BOSS_MECH, baseHp: 310, speed: 0.5, targetY: 95,
     attacks: ['aimed_stream', 'fan', 'laser', 'ring'],
+    signature: 'ring',
     minionTypes: ['drone'], minionCount: 1, minionInterval: 3000,
   },
   {
     id: 'carrier', name: 'ESCORT-CARRIER', width: 128, height: 92,
     color: CONFIG.COLORS.BOSS_CARRIER, baseHp: 330, speed: 0.25, targetY: 85,
     attacks: ['fan', 'aimed_stream', 'ring', 'laser', 'soundwave'],
+    signature: 'soundwave',
     minionTypes: ['fleet'], minionCount: 2, minionInterval: 3200,
   },
   {
     id: 'omega', name: 'THE EMBLEM / FINAL CORE', width: 56, height: 56,
     color: CONFIG.COLORS.BOSS_OMEGA, baseHp: 520, speed: 1.1, targetY: 40,
     attacks: ['fan', 'aimed_stream', 'ring', 'laser', 'radial', 'spiral', 'soundwave', 'shockwave'],
+    signature: 'spiral',
     minionTypes: ['fleet', 'shield'], minionCount: 2, minionInterval: 3000,
   },
   {
     id: 'abyss', name: 'ABYSS', width: 100, height: 100,
     color: CONFIG.COLORS.BOSS_ABYSS, baseHp: 300, speed: 1.5, targetY: 60,
     attacks: ['radial', 'aimed_stream', 'spiral', 'fan', 'laser', 'ring', 'composite', 'shockwave', 'soundwave'],
+    signature: 'composite',
     minionTypes: ['basic', 'shooter', 'shield'], minionCount: 3, minionInterval: 3500,
   },
 ];
@@ -525,8 +537,7 @@ export class BossManager {
     this.boss.patternTimer += deltaTime * 1000;
 
     if (this.boss.attackTimer >= this.boss.attackCooldown && !this.boss.currentAttack) {
-      const attacks = this.getAvailableAttacks(def);
-      this.boss.currentAttack = attacks[Math.floor(Math.random() * attacks.length)];
+      this.boss.currentAttack = this.pickAttack(def);
       this.boss.attackDuration = 2000 + Math.random() * 1500;
       this.boss.patternTimer = 0;
       this.boss.attackTimer = 0;
@@ -701,6 +712,9 @@ export class BossManager {
   private getAvailableAttacks(def: BossDef): BossAttackType[] {
     if (!this.boss) return ['radial'];
     const phaseAttacks = def.attacks.filter(a => {
+      // A boss's signature is always available (from phase 1) so it has an
+      // immediately recognizable identity instead of only unlocking later.
+      if (a === def.signature) return true;
       if (a === 'aimed_stream' || a === 'spiral') return this.boss!.phase >= 1;
       if (a === 'composite') return this.boss!.phase >= 2;
       if (a === 'crossfire') return this.boss!.phase >= 2;
@@ -713,6 +727,21 @@ export class BossManager {
       return true;
     });
     return phaseAttacks.length > 0 ? phaseAttacks : ['radial'];
+  }
+
+  /**
+   * Weighted attack selection that strongly favors the boss's signature move
+   * (roughly 55%), then picks from the remaining available attacks. This makes
+   * each boss read as its signature rather than an interchangeable random sampler.
+   */
+  private pickAttack(def: BossDef): BossAttackType {
+    const available = this.getAvailableAttacks(def);
+    const signature = def.signature;
+    const pool = available.filter(a => a !== signature);
+    if (pool.length === 0) return signature;
+    // ~55% signature, the rest spread over the remaining attacks.
+    if (Math.random() < 0.55) return signature;
+    return pool[Math.floor(Math.random() * pool.length)];
   }
 
   private updateMinionSpawning(deltaTime: number) {

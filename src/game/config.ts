@@ -43,6 +43,9 @@ export const CONFIG = {
   ENEMY_SPEED: 2,
   ENEMY_WIDTH: 30,
   ENEMY_HEIGHT: 30,
+  // Soft ceiling on simultaneously-active enemies. Scales up with difficulty so
+  // later waves can field more at once without truncating a wave mid-spawn.
+  MAX_ONSCREEN_ENEMIES: 30,
 
   // Power-ups
   POWERUP_SPEED: 2,

@@ -38,6 +38,7 @@ export interface Enemy {
   reflecting: boolean;
   reflectTimer: number;
   healTimer: number;
+  enterTimer: number;
 }
 
 /** A tile of an enemy that must be stripped (shield/armor) before core damage. */
@@ -100,7 +101,12 @@ export class EnemyManager {
     const isTerrain = type === 'terrain';
     const isTurret = type === 'turret';
     const isReflector = type === 'reflector';
-    const health = hp ?? (isWall ? 3 : type === 'elite' ? 4 : type === 'leader' ? 4 : type === 'advanced' ? 2 : type === 'mirror' ? 2 : type === 'healer' ? 1 : isSplinterer ? 1 : isAttractor ? 3 : isTerrain ? 3 : isTurret ? 2 : isReflector ? 2 : 1);
+    // Base HP (explicit `hp` overrides are authored difficulty choices and are
+    // left unscaled). Default HP for a type scales mildly with wave difficulty so
+    // later waves genuinely take more hits — otherwise a maxed player one-shots
+    // everything and later waves feel EASIER, not harder.
+    const baseHealth = isWall ? 3 : type === 'elite' ? 4 : type === 'leader' ? 4 : type === 'advanced' ? 2 : type === 'mirror' ? 2 : type === 'healer' ? 1 : isSplinterer ? 1 : isAttractor ? 3 : isTerrain ? 3 : isTurret ? 2 : isReflector ? 2 : 1;
+    const health = hp ?? Math.max(1, Math.round(baseHealth * (1 + this.difficulty * 0.08)));
     this.enemies.push({
       x, y,
       width: isWall ? 30 : isAttractor ? 40 : isTerrain ? 38 : type === 'elite' ? 35 : type === 'leader' ? 35 : isRusher ? 26 : isHomer ? 26 : CONFIG.ENEMY_WIDTH,
@@ -136,6 +142,9 @@ export class EnemyManager {
       reflecting: isReflector && Math.random() < 0.5,
       reflectTimer: Math.random() * 2600,
       healTimer: 0,
+      // Warp-in telegraph: enemies fade/scalem-in over a short ramp so they
+      // never pop into existence with zero cue ("out of thin air").
+      enterTimer: 260,
     });
 
     if (formationId >= 0 && !this.formationOrigins.has(formationId)) {
@@ -312,6 +321,7 @@ export class EnemyManager {
       enemy.healTimer += deltaTime * 1000;
       enemy.shootTimer += deltaTime * 1000;
       if (enemy.flashTimer > 0) enemy.flashTimer -= deltaTime * 1000;
+      if (enemy.enterTimer > 0) enemy.enterTimer -= deltaTime * 1000;
 
       if (enemy.formationId >= 0) {
         const origin = this.formationOrigins.get(enemy.formationId);
@@ -828,6 +838,7 @@ export class EnemyManager {
         reflecting: false,
         reflectTimer: 0,
         healTimer: 0,
+        enterTimer: 200,
       };
       this.enemies.push(copy);
     }
@@ -843,6 +854,24 @@ export class EnemyManager {
 
       const centerX = enemy.x + enemy.width / 2;
       const centerY = enemy.y + enemy.height / 2;
+
+      // Warp-in telegraph: a soft expanding ring that fades over the first
+      // ~260ms, so every enemy has an explicit entrance cue and never appears
+      // to pop out of thin air. Short-lived and additive — it does not clash
+      // with the per-shape alpha below.
+      if (enemy.enterTimer > 0) {
+        const t = 1 - enemy.enterTimer / 260;
+        ctx.strokeStyle = CONFIG.COLORS.ENEMY_GLOW;
+        ctx.shadowColor = CONFIG.COLORS.ENEMY_GLOW;
+        ctx.shadowBlur = 12;
+        ctx.lineWidth = 2;
+        ctx.globalAlpha = (1 - t) * 0.8;
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, Math.max(enemy.width, enemy.height) * (0.4 + t * 0.8), 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+        ctx.shadowBlur = 0;
+      }
 
       if (enemy.flashTimer > 0) {
         ctx.shadowColor = '#FFFFFF';
@@ -1361,6 +1390,19 @@ export class EnemyManager {
   }
 
   countActive(): number {
+    let c = 0;
+    for (const e of this.enemies) if (e.active) c++;
+    return c;
+  }
+
+  /**
+   * Count of ALL live enemies currently in the arena (parked terrain, turrets,
+   * reflectors, etc. included — nothing is excluded). Used to gate wave
+   * progression: the next wave only starts once every enemy of the current
+   * wave has been destroyed or removed. Unlike `countForSpawnCap`, this must
+   * count every remaining actor so a lingering enemy blocks the advance.
+   */
+  countAlive(): number {
     let c = 0;
     for (const e of this.enemies) if (e.active) c++;
     return c;
