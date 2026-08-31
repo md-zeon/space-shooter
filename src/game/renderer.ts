@@ -30,12 +30,16 @@ export class Renderer {
   private helpOpen: boolean = false;
   private soundOn: boolean = true;
   private statsOpen: boolean = false;
+  private isFullscreen: boolean = false;
+  private autoBomb: boolean = true;
 
   setSoundOn(on: boolean) { this.soundOn = on; }
   setHelpOpen(open: boolean) { this.helpOpen = open; }
   isHelpOpen(): boolean { return this.helpOpen; }
   setStatsOpen(open: boolean) { this.statsOpen = open; }
   isStatsOpen(): boolean { return this.statsOpen; }
+  setFullscreen(on: boolean) { this.isFullscreen = on; }
+  setAutoBomb(on: boolean) { this.autoBomb = on; }
 
   init(canvasWidth: number, canvasHeight: number) {
     this.canvasWidth = canvasWidth;
@@ -81,6 +85,27 @@ export class Renderer {
       ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
       ctx.fill();
     }
+  }
+
+  /** Subtle "safe floor" trackpad strip: the ship never tracks into this band. */
+  renderDeadZone(ctx: CanvasRenderingContext2D) {
+    const h = CONFIG.TOUCH_DEADZONE;
+    const y = this.canvasHeight - h;
+    ctx.save();
+    ctx.globalAlpha = 0.5;
+    const gradient = ctx.createLinearGradient(0, y, 0, this.canvasHeight);
+    gradient.addColorStop(0, 'rgba(0, 255, 255, 0)');
+    gradient.addColorStop(1, 'rgba(0, 255, 255, 0.10)');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, y, this.canvasWidth, h);
+    ctx.strokeStyle = 'rgba(0, 255, 255, 0.25)';
+    ctx.setLineDash([4, 6]);
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    ctx.lineTo(this.canvasWidth, y);
+    ctx.stroke();
+    ctx.restore();
   }
 
   renderHUD(
@@ -681,8 +706,18 @@ export class Renderer {
     this.drawMenuItem(ctx, 'RESUME', this.canvasWidth / 2 - itemWidth / 2, startY, itemWidth, itemHeight);
     this.drawMenuItem(ctx, 'RESTART', this.canvasWidth / 2 - itemWidth / 2, startY + itemHeight + gap, itemWidth, itemHeight);
     this.drawMenuItem(ctx, 'EXIT', this.canvasWidth / 2 - itemWidth / 2, startY + (itemHeight + gap) * 2, itemWidth, itemHeight);
+    this.drawMenuItem(ctx, this.fullscreenLabel(), this.canvasWidth / 2 - itemWidth / 2, startY + (itemHeight + gap) * 3, itemWidth, itemHeight);
+    this.drawMenuItem(ctx, this.autoBombLabel(), this.canvasWidth / 2 - itemWidth / 2, startY + (itemHeight + gap) * 4, itemWidth, itemHeight);
 
     ctx.restore();
+  }
+
+  private fullscreenLabel(): string {
+    return this.isFullscreen ? 'FULLSCREEN: ON' : 'FULLSCREEN: OFF';
+  }
+
+  private autoBombLabel(): string {
+    return this.autoBomb ? 'AUTO-BOMB: ON' : 'AUTO-BOMB: OFF';
   }
 
   renderGameOver(

@@ -65,10 +65,13 @@ export function updatePlayer(
 
   if (input.touchTarget) {
     // Direct position follow with smoothing. Focus slows the pursuit so the
-    // player gets fine-grained thumb control through dense lanes.
+    // player gets fine-grained thumb control through dense lanes. The bottom
+    // TOUCH_DEADZONE strip is reserved as a trackpad: the ship never tracks
+    // into it, so a resting thumb down there never occludes the hull.
     const smoothing = player.focusing ? 0.10 : 0.25;
+    const deadY = canvasHeight - CONFIG.TOUCH_DEADZONE;
     const targetX = input.touchTarget.x - player.width / 2;
-    const targetY = input.touchTarget.y - player.height / 2;
+    const targetY = Math.min(input.touchTarget.y - player.height / 2, deadY - player.height);
     player.x += (targetX - player.x) * smoothing;
     player.y += (targetY - player.y) * smoothing;
   } else {

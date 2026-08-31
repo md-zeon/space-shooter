@@ -45,6 +45,9 @@ export class GameEngine {
   // Focus held via the on-screen button (Shift keyboard also focuses)
   private focusButtonHeld: boolean = false;
 
+  // Auto-bomb toggle (persisted in settings)
+  private autoBomb: boolean = true;
+
   private lastTime: number = 0;
   private accumulator: number = 0;
   private animationId: number = 0;
@@ -105,16 +108,30 @@ export class GameEngine {
     this.loadHighScore();
     this.loadShootMode();
     this.loadMeta();
+    this.loadSettings();
+    this.renderer.setAutoBomb(this.autoBomb);
     this.audio.startMenuMusic();
 
     this.lastTime = performance.now();
+    window.addEventListener('fullscreenchange', this.syncFullscreenState);
     this.loop(this.lastTime);
   }
 
   destroy() {
     this.input.destroy();
+    window.removeEventListener('fullscreenchange', this.syncFullscreenState);
     cancelAnimationFrame(this.animationId);
   }
+
+  /** Keep the pause-menu FULLSCREEN label in sync with the real DOM state. */
+  private syncFullscreenState = () => {
+    const active = Boolean(
+      document.fullscreenElement ||
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (document as any).webkitFullscreenElement
+    );
+    this.renderer.setFullscreen(active);
+  };
 
   private loop = (currentTime: number) => {
     const deltaTime = Math.min((currentTime - this.lastTime) / 1000, 0.1);
@@ -238,6 +255,8 @@ export class GameEngine {
           if (item?.id === 'RESUME') { this.audio.playUIConfirm(); this.state = 'playing'; }
           else if (item?.id === 'RESTART') { this.audio.playUIConfirm(); this.startGame(); }
           else if (item?.id === 'EXIT') { this.audio.playUIConfirm(); this.state = 'menu'; this.audio.startMenuMusic(); }
+          else if (item?.id.startsWith('FULLSCREEN')) { this.audio.playUIConfirm(); this.toggleFullscreen(); }
+          else if (item?.id.startsWith('AUTO-BOMB')) { this.audio.playUIConfirm(); this.autoBomb = !this.autoBomb; this.renderer.setAutoBomb(this.autoBomb); this.saveSettings(); }
         }
         if (this.input.isKeyJustPressed('Escape')) { this.audio.playUIPause(); this.state = 'playing'; }
         if (this.input.isKeyJustPressed(' ') || this.input.isKeyJustPressed('Enter')) { this.audio.playUIConfirm(); this.state = 'playing'; }
@@ -385,10 +404,25 @@ export class GameEngine {
     this.audio.resume();
     this.audio.playShoot();
 
+    const focused = this.player.focusing;
     const narrow = this.player.narrowTimer > 0;
     const bullet = this.bullets.acquire(true);
     bullet.x = this.player.x + this.player.width / 2 - bullet.width / 2;
     bullet.y = this.player.y;
+
+    if (focused) {
+      // Focus mode fires a tight forward "laser" column: dense straight shots
+      // that slip through gaps instead of the wide power-level spread.
+      const cx = this.player.x + this.player.width / 2;
+      for (let off = -3; off <= 3; off++) {
+        const b = this.bullets.acquire(true);
+        b.x = cx - 2 + off;
+        b.y = this.player.y + 5;
+        b.vx = 0;
+        b.vy = -CONFIG.BULLET_SPEED;
+      }
+      return;
+    }
 
     if (narrow) {
       const count = CONFIG.NARROW_BULLET_COUNT;
@@ -970,10 +1004,11 @@ export class GameEngine {
       return;
     }
 
-    // Deathbomb / auto-bomb assist: if a bomb is available, consume one on hit
-    // to cancel the damage instead of losing a life. Generous window suits
-    // touch play (you can't mash as fast as an arcade button).
-    if (this.player.bombs > 0) {
+    // Deathbomb / auto-bomb assist: when enabled (default), a bomb in stock is
+    // consumed on hit to cancel the damage instead of losing a life. Generous
+    // window suits touch play. Players can disable it in the pause menu for
+    // score-purist runs. When off, the hit proceeds directly to the life loss.
+    if (this.autoBomb && this.player.bombs > 0) {
       this.player.bombs--;
       this.activateBomb();
       this.audio.playBomb();
@@ -1134,6 +1169,42 @@ export class GameEngine {
     }
   }
 
+  /**
+   * Exit true fullscreen (Fullscreen API), best-effort like requestFullscreen.
+   * Used from the pause menu so players can leave immersive mode without Esc.
+   */
+  private exitFullscreen() {
+    try {
+      const exit = document.exitFullscreen?.call(document) ||
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (document as any).webkitExitFullscreen?.call(document);
+      if (exit && typeof exit.catch === 'function') exit.catch(() => {});
+    } catch {
+      // ignore — fullscreen is best-effort
+    }
+  }
+
+  /**
+   * Toggle true fullscreen from the pause menu. Callers (the React Shell)
+   * pass their own button handler for native gestures; this in-canvas handler
+   * supports desktop/keyboard players and the pause-menu FULLSCREEN item.
+   */
+  toggleFullscreen(): boolean {
+    const active = Boolean(
+      document.fullscreenElement ||
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (document as any).webkitFullscreenElement
+    );
+    if (active) {
+      this.exitFullscreen();
+      this.renderer.setFullscreen(false);
+    } else {
+      this.requestFullscreen();
+      this.renderer.setFullscreen(true);
+    }
+    return !active;
+  }
+
   private gameOver() {
     this.state = 'gameover';
     this.audio.playGameOver();
@@ -1205,6 +1276,25 @@ export class GameEngine {
         enemiesDestroyed: this.metaEnemiesDestroyed,
         bossesKilled: this.metaBossesKilled,
         shipSkin: this.shipSkin,
+      }));
+    } catch {}
+  }
+
+  /* ---- Settings persistence (auto-bomb toggle, etc.) ---- */
+
+  private loadSettings() {
+    try {
+      const raw = localStorage.getItem('space-shooter-settings');
+      if (!raw) return;
+      const data = JSON.parse(raw) as { autoBomb?: boolean };
+      if (typeof data.autoBomb === 'boolean') this.autoBomb = data.autoBomb;
+    } catch {}
+  }
+
+  private saveSettings() {
+    try {
+      localStorage.setItem('space-shooter-settings', JSON.stringify({
+        autoBomb: this.autoBomb,
       }));
     } catch {}
   }
@@ -1287,6 +1377,7 @@ export class GameEngine {
       this.renderBoss(ctx);
     }
     this.powerUps.render(ctx);
+    this.renderer.renderDeadZone(ctx);
 
     const bullets = this.bullets.getActive();
     ctx.save();
