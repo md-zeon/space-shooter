@@ -1,9 +1,9 @@
 import { CONFIG } from './config';
 
 export type BossPhase = 1 | 2 | 3;
-export type BossAttackType = 'radial' | 'aimed_stream' | 'spiral' | 'fan' | 'laser' | 'ring' | 'composite' | 'shockwave' | 'soundwave' | 'crossfire';
-export type BossId = 'cipher' | 'spider' | 'turrets' | 'statue' | 'creature' | 'omega' | 'abyss';
-export type MinionType = 'basic' | 'shooter' | 'shield' | 'rusher' | 'mirror' | 'escort';
+export type BossAttackType = 'radial' | 'aimed_stream' | 'spiral' | 'fan' | 'laser' | 'ring' | 'composite' | 'shockwave' | 'soundwave' | 'crossfire' | 'snipe';
+export type BossId = 'cipher' | 'spider' | 'turrets' | 'statue' | 'creature' | 'shell' | 'omega' | 'abyss';
+export type MinionType = 'basic' | 'shooter' | 'shield' | 'rusher' | 'mirror' | 'escort' | 'aimer' | 'mine';
 
 export interface BossBulletRequest {
   x: number;
@@ -59,6 +59,8 @@ export interface BossState {
   color: string;
   minionSpawnTimer: number;
   minions: BossMinion[];
+  relocateTimer: number;
+  aimerArrived: boolean;
 }
 
 interface BossDef {
@@ -106,6 +108,12 @@ const BOSS_DEFS: BossDef[] = [
     color: CONFIG.COLORS.BOSS_CREATURE, baseHp: 260, speed: 3.2, targetY: 50,
     attacks: ['aimed_stream', 'fan', 'laser', 'shockwave', 'radial'],
     minionTypes: ['escort'], minionCount: 2, minionInterval: 6000,
+  },
+  {
+    id: 'shell', name: 'SHELL', width: 150, height: 100,
+    color: CONFIG.COLORS.BOSS_SHELL, baseHp: 320, speed: 2.4, targetY: 55,
+    attacks: ['aimed_stream', 'fan', 'ring', 'laser', 'radial', 'snipe', 'shockwave'],
+    minionTypes: ['aimer', 'mine'], minionCount: 2, minionInterval: 5000,
   },
   {
     id: 'omega', name: 'OMEGA', width: 110, height: 80,
@@ -167,7 +175,26 @@ export class BossManager {
       color: def.color,
       minionSpawnTimer: 3000,
       minions: [],
+      relocateTimer: 0,
+      aimerArrived: false,
     };
+
+    // The Shell opens with a defensive ring of 4 orbiting fast-seeking mines.
+    if (def.id === 'shell') {
+      for (let i = 0; i < 4; i++) {
+        const m: BossMinion = {
+          x: this.boss.x + this.boss.width / 2,
+          y: this.boss.y + this.boss.height / 2,
+          width: 14, height: 14,
+          health: 1, maxHealth: 1,
+          type: 'mine',
+          active: true,
+          patternTimer: 0,
+          orbitAngle: (i / 4) * Math.PI * 2,
+        };
+        this.boss.minions.push(m);
+      }
+    }
   }
 
   update(deltaTime: number, canvasWidth: number, playerX: number): BossBulletRequest[] {
@@ -266,6 +293,26 @@ export class BossManager {
       return;
     }
 
+    if (this.boss.bossId === 'shell') {
+      // D6 TIMING thesis: the Shell's inner core blinks HIDDEN -> TELEGRAPH ->
+      // REVEALED, mirroring the teleporter archetype. Phase 1 teaches (always
+      // open); phase 2+ the armor re-locks in a timed close/open cycle so the
+      // player must read the flicker and fire into the reveal window.
+      if (this.boss.phase === 1) {
+        this.boss.coreOpen = true;
+        this.boss.coreCycleTimer = 0;
+        return;
+      }
+      const closedDuration = 1200;
+      const revealDuration = 1500;
+      this.boss.coreCycleTimer += deltaTime * 1000;
+      const cycle = closedDuration + revealDuration;
+      const t = this.boss.coreCycleTimer % cycle;
+      this.boss.coreOpen = t >= closedDuration;
+      if (this.boss.phaseTransitioning) this.boss.coreOpen = true;
+      return;
+    }
+
     // All other bosses: always damageable (core stays exposed).
     this.boss.coreOpen = true;
   }
@@ -314,6 +361,25 @@ export class BossManager {
         this.boss.y = this.boss.targetY + Math.sin(this.boss.moveTimer * 0.0024) * 6;
         return;
       }
+      case 'shell':
+        // Teleport-relocation: the D6 Shell blinks to a fresh column on a timer.
+        // It spends a beat invisible (bog-rule) before landing, forcing the player
+        // to re-acquire it and re-read the aimer marksman.
+        if (this.boss.moveTimer > 2600) {
+          this.boss.moveTimer = 0;
+          this.boss.relocateTimer = 500;
+          this.boss.targetX = 30 + Math.random() * (canvasWidth - this.boss.width - 60);
+        }
+        if (this.boss.relocateTimer > 0) {
+          // Hiding flash (the bog-rule telegraph beat).
+          this.boss.relocateTimer -= deltaTime * 1000;
+          if (this.boss.relocateTimer <= 0) {
+            this.boss.x = this.boss.targetX;
+            this.boss.flashTimer = 100;
+            this.boss.moveTimer = 0;
+          }
+        }
+        return;
       case 'omega':
         if (this.boss.moveTimer > 5000) {
           this.boss.moveTimer = 0;
@@ -484,6 +550,19 @@ export class BossManager {
           }
           break;
         }
+        case 'snipe': {
+          // The aimer marksman is the weak-point the shell aims through: it
+          // beelines toward the player and its position becomes the origin of a
+          // single fast aimed bolt. Dodge the tracer, then kill it (HP 1).
+          const aimer = this.boss.minions.find(m => m.active && m.type === 'aimer');
+          const fromX = aimer ? aimer.x + aimer.width / 2 : this.boss.x + this.boss.width / 2;
+          const fromY = aimer ? aimer.y + aimer.height / 2 : cy;
+          if (Math.floor(this.boss.patternTimer / 650) > Math.floor((this.boss.patternTimer - deltaTime * 1000) / 650)) {
+            const angle = Math.atan2(CONFIG.HEIGHT - fromY, playerX - fromX);
+            requests.push({ x: fromX, y: fromY, angle, speed: 7, type: 'laser' });
+          }
+          break;
+        }
       }
 
       if (this.boss.attackDuration <= 0) {
@@ -505,6 +584,7 @@ export class BossManager {
       // The Statue, however, is the "eye-beam" boss — one eye beams from phase 1,
       // and only the double-eye CROSSFIRE waits for phase 2. Laser is always on.
       if (a === 'laser') return def.id === 'statue' || this.boss!.phase >= 2;
+      if (a === 'snipe') return this.boss!.phase >= 2;
       return true;
     });
     return phaseAttacks.length > 0 ? phaseAttacks : ['radial'];
@@ -533,15 +613,20 @@ export class BossManager {
 
   private spawnMinion(type: MinionType) {
     if (!this.boss) return;
-    const health = type === 'shield' || type === 'escort' ? 3 : type === 'shooter' || type === 'rusher' ? 2 : type === 'mirror' ? 2 : 1;
-    const width = type === 'shield' ? 25 : type === 'escort' ? 28 : 20;
-    const height = type === 'shield' ? 25 : type === 'escort' ? 28 : 20;
+    const health = type === 'shield' || type === 'escort' ? 3 : type === 'shooter' || type === 'rusher' ? 2 : type === 'mirror' ? 2 : type === 'mine' ? 1 : type === 'aimer' ? 1 : 1;
+    const width = type === 'shield' ? 25 : type === 'escort' ? 28 : type === 'mine' ? 14 : type === 'aimer' ? 22 : 20;
+    const height = type === 'shield' ? 25 : type === 'escort' ? 28 : type === 'mine' ? 14 : type === 'aimer' ? 22 : 20;
 
     let orbitAngle = Math.random() * Math.PI * 2;
     if (type === 'escort') {
       // Elite escorts ride LEFT/RIGHT of the creature's fins (sealing the core).
       const escortCount = this.boss.minions.filter(mm => mm.type === 'escort').length;
       orbitAngle = escortCount % 2 === 0 ? -0.3 : 0.3;
+    }
+    if (type === 'mine') {
+      // Orbiting mines spawn around the shell and then seek the player.
+      const mineCount = this.boss.minions.filter(mm => mm.type === 'mine').length;
+      orbitAngle = (mineCount / 4) * Math.PI * 2;
     }
 
     this.boss.minions.push({
@@ -627,6 +712,40 @@ export class BossManager {
           }
           break;
         }
+
+        case 'aimer': {
+          // Weak-point marksman: beelines toward the player while hovering just
+          // below the shell. It reads as "the shell is aiming where I point."
+          if (this.boss) {
+            const targetY = this.boss.y + this.boss.height * 0.75;
+            const mc = m.x + m.width / 2;
+            const diff = playerX - mc;
+            m.x += Math.sign(diff) * Math.min(Math.abs(diff) * 0.03, 2.2 * dt60);
+            if (m.y < targetY) m.y += 1 * dt60;
+            if (m.y > targetY) m.y -= 1 * dt60;
+          }
+          break;
+        }
+
+        case 'mine': {
+          // Fast-seeking mine: orbits the shell briefly, then lunges at the player.
+          if (this.boss) {
+            const orbitRadius = this.boss.width * 1.1;
+            const cx = this.boss.x + this.boss.width / 2;
+            const cy = this.boss.y + this.boss.height / 2;
+            const around = m.patternTimer * 0.004;
+            m.x = cx + Math.cos(around + m.orbitAngle) * orbitRadius - m.width / 2;
+            m.y = cy + Math.sin(around * 0.8 + m.orbitAngle) * 30 - m.height / 2;
+          }
+          if (m.patternTimer > 2400) {
+            const mc = m.x + m.width / 2;
+            const diff = playerX - mc;
+            m.x += Math.sign(diff) * 2.4 * dt60;
+            m.y += 4 * dt60;
+            if (m.y > CONFIG.HEIGHT + 30) m.active = false;
+          }
+          break;
+        }
       }
     }
   }
@@ -636,6 +755,7 @@ export class BossManager {
     if (this.boss.bossId === 'spider' && !this.boss.coreOpen) return false;
     if (this.boss.bossId === 'turrets' && !this.boss.coreOpen) return false;
     if (this.boss.bossId === 'creature' && !this.boss.coreOpen) return false;
+    if (this.boss.bossId === 'shell' && !this.boss.coreOpen) return false;
 
     this.boss.health -= amount;
     this.boss.flashTimer = 100;

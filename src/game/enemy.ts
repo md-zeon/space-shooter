@@ -1,6 +1,6 @@
 import { CONFIG } from './config';
 
-export type EnemyType = 'basic' | 'advanced' | 'elite' | 'wall' | 'splinterer' | 'rusher' | 'homer' | 'mirror' | 'mirrorcopy' | 'healer' | 'leader';
+export type EnemyType = 'basic' | 'advanced' | 'elite' | 'wall' | 'splinterer' | 'rusher' | 'homer' | 'mirror' | 'mirrorcopy' | 'healer' | 'leader' | 'teleporter';
 
 export interface Enemy {
   x: number;
@@ -25,6 +25,9 @@ export interface Enemy {
   aimShards: boolean;
   shieldHp: number;
   heading: number;
+  isReward: boolean;
+  hidden: boolean;
+  telegraphing: boolean;
 }
 
 /** A tile of an enemy that must be stripped (shield/armor) before core damage. */
@@ -73,7 +76,9 @@ export class EnemyManager {
     offsetY: number = 0,
     hp?: number,
     aimShards: boolean = false,
-    shieldHp?: number
+    shieldHp?: number,
+    isReward: boolean = false,
+    spawnHidden: boolean = false
   ) {
     const isWall = type === 'wall';
     const isSplinterer = type === 'splinterer';
@@ -102,6 +107,9 @@ export class EnemyManager {
       aimShards,
       shieldHp: shieldHp ?? 0,
       heading: Math.PI / 2,
+      isReward,
+      hidden: spawnHidden,
+      telegraphing: false,
     });
 
     if (formationId >= 0 && !this.formationOrigins.has(formationId)) {
@@ -429,6 +437,31 @@ export class EnemyManager {
             break;
           }
 
+          case 'teleporter': {
+            // Blink cycle: HIDDEN (safe, no render) -> TELEGRAPH (ghost flicker,
+            // readiness beat — still intangible) -> REVEALED (hittable). The
+            // player must read the flicker and fire into the reveal.
+            const hiddenDur = 1400;
+            const telegraphDur = 350;
+            const revealDur = 1600;
+            const cycle = hiddenDur + telegraphDur + revealDur;
+            const t = enemy.patternTimer % cycle;
+            enemy.hidden = true;
+            enemy.telegraphing = false;
+            if (t >= hiddenDur && t < hiddenDur + telegraphDur) {
+              enemy.hidden = false;
+              enemy.telegraphing = true;
+            } else if (t < hiddenDur + telegraphDur + revealDur) {
+              enemy.hidden = false;
+              enemy.telegraphing = false;
+              // While revealed it creeps down into range and drifts toward player.
+              enemy.y += speed * 0.7;
+              const dx = this.playerX - (enemy.x + enemy.width / 2);
+              enemy.x += Math.sign(dx) * Math.min(Math.abs(dx) * 0.006, speed * 0.3);
+            }
+            break;
+          }
+
           default:
             enemy.y += speed;
         }
@@ -505,6 +538,7 @@ export class EnemyManager {
   }
 
   private checkShoot(enemy: Enemy, canvasWidth: number, canvasHeight: number): EnemyBulletRequest[] | null {
+    if (enemy.hidden || enemy.telegraphing) return null;
     const requests: EnemyBulletRequest[] = [];
     const cx = enemy.x + enemy.width / 2;
     const cy = enemy.y + enemy.height;
@@ -605,6 +639,7 @@ export class EnemyManager {
    */
   damageEnemy(enemy: Enemy, amount: number): boolean {
     if (!enemy.active) return false;
+    if (enemy.hidden || enemy.telegraphing) return false;
     if (enemy.shieldHp > 0) {
       enemy.shieldHp -= amount;
       enemy.flashTimer = 100;
@@ -646,6 +681,9 @@ export class EnemyManager {
         aimShards: false,
         shieldHp: 0,
         heading: Math.atan2(this.playerY - cy, this.playerX - cx),
+        isReward: false,
+        hidden: false,
+        telegraphing: false,
       };
       this.enemies.push(copy);
     }
@@ -655,6 +693,7 @@ export class EnemyManager {
   render(ctx: CanvasRenderingContext2D) {
     for (const enemy of this.enemies) {
       if (!enemy.active) continue;
+      if (enemy.hidden) continue;
 
       ctx.save();
 
@@ -716,6 +755,27 @@ export class EnemyManager {
           color = CONFIG.COLORS.ENEMY_LEADER;
           shape = 'leader';
           break;
+        case 'teleporter':
+          color = CONFIG.COLORS.ENEMY_TELEPORTER;
+          shape = 'teleporter';
+          break;
+      }
+
+      if (enemy.telegraphing) {
+        // Readiness beat: the camera-reads-the-teleport-ghost flicker. Visible
+        // but NOT hittable — the draw of the reveal is still to come.
+        const pulse = (Math.sin(enemy.patternTimer * 0.05) + 1) / 2;
+        ctx.globalAlpha = 0.15 + pulse * 0.35;
+        ctx.strokeStyle = CONFIG.COLORS.ENEMY_TELEPORTER_TELEGRAPH;
+        ctx.shadowColor = CONFIG.COLORS.ENEMY_TELEPORTER_TELEGRAPH;
+        ctx.shadowBlur = 10;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, Math.max(enemy.width, enemy.height) * 0.62 + pulse * 4, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+        ctx.restore();
+        continue;
       }
 
       ctx.fillStyle = color;
@@ -880,6 +940,32 @@ export class EnemyManager {
         ctx.globalAlpha = 0.4 + aura * 0.5;
         ctx.beginPath();
         ctx.arc(centerX, centerY, enemy.width * 0.85 + aura * 6, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      } else if (shape === 'teleporter') {
+        // Displacement rig: hexagonal core fringed with anti-telegraph sparks.
+        // Renders only while REVEALED (the hidden state skips earlier).
+        ctx.fillStyle = color;
+        ctx.beginPath();
+        for (let j = 0; j < 6; j++) {
+          const angle = (j / 6) * Math.PI * 2 - Math.PI / 2;
+          const px = centerX + Math.cos(angle) * enemy.width * 0.45;
+          const py = centerY + Math.sin(angle) * enemy.height * 0.45;
+          if (j === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = '#FFFFFF';
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, 3, 0, Math.PI * 2);
+        ctx.fill();
+        const spark = (Math.sin(enemy.patternTimer * 0.02) + 1) / 2;
+        ctx.strokeStyle = CONFIG.COLORS.ENEMY_TELEPORTER;
+        ctx.lineWidth = 1;
+        ctx.globalAlpha = 0.3 + spark * 0.5;
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, enemy.width * 0.6 + spark * 3, 0, Math.PI * 2);
         ctx.stroke();
         ctx.globalAlpha = 1;
       } else {

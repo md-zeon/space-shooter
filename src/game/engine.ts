@@ -221,7 +221,8 @@ export class GameEngine {
         cmd.type, cmd.x, cmd.y, cmd.speed,
         cmd.movementPattern, cmd.shootPattern,
         cmd.formationId, cmd.offsetX, cmd.offsetY,
-        cmd.hp, cmd.aimShards, cmd.shieldHp
+        cmd.hp, cmd.aimShards, cmd.shieldHp,
+        cmd.isReward, cmd.startHidden
       );
     }
 
@@ -637,6 +638,9 @@ export class GameEngine {
       );
       for (const enemy of enemies) {
         if (!enemy.active) continue;
+        // A teleporting enemy is intangible while hidden or telegraphing —
+        // it only exists to be shot during the reveal.
+        if (enemy.hidden || enemy.telegraphing) continue;
 
         if (checkCollision(
           { x: enemy.x, y: enemy.y, width: enemy.width, height: enemy.height },
@@ -682,7 +686,7 @@ export class GameEngine {
     }
   }
 
-  private onEnemyKilled(enemy: { x: number; y: number; width: number; height: number; health?: number; type?: string; active?: boolean; aimShards?: boolean }) {
+  private onEnemyKilled(enemy: { x: number; y: number; width: number; height: number; health?: number; type?: string; active?: boolean; aimShards?: boolean; isReward?: boolean }) {
     if (enemy.active === false) return;
     enemy.active = false;
 
@@ -693,6 +697,12 @@ export class GameEngine {
     this.chainTimer = CONFIG.CHAIN_TIMEOUT;
     const chainMultiplier = Math.min(this.chain, 10);
     this.score += CONFIG.SCORE_PER_ENEMY * level * chainMultiplier;
+
+    // Reward teleporter: catching it inside the brief reveal window pays out a
+    // big bonus — the payout is the whole point of risking the kill in-window.
+    if (enemy.isReward) {
+      this.score += CONFIG.SCORE_PER_ENEMY * 6 * chainMultiplier;
+    }
 
     if (enemy.type === 'elite') {
       this.audio.playExplosion();
@@ -1264,6 +1274,52 @@ export class GameEngine {
           ctx.arc(cx, cy, 3, 0, Math.PI * 2);
           ctx.fill();
           break;
+
+        case 'aimer':
+          // Weak-point marksman: a red reticle that marks where the shell is
+          // aiming. Read it, dodge the tracer, then kill it (HP 1).
+          ctx.fillStyle = '#FF3333';
+          ctx.shadowColor = '#FF3333';
+          ctx.shadowBlur = 12;
+          ctx.beginPath();
+          ctx.arc(cx, cy, m.width * 0.5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = '#FFFFFF';
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.arc(cx, cy, m.width * 0.9, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(cx - m.width * 1.2, cy);
+          ctx.lineTo(cx - m.width * 0.6, cy);
+          ctx.moveTo(cx + m.width * 0.6, cy);
+          ctx.lineTo(cx + m.width * 1.2, cy);
+          ctx.stroke();
+          break;
+
+        case 'mine':
+          // Fast-seeking mine: a spiked pellet that orbits then lunges. One hit
+          // and it's gone, but it flies straight at you.
+          ctx.fillStyle = '#FFD700';
+          ctx.shadowColor = '#FFD700';
+          ctx.shadowBlur = 12;
+          ctx.beginPath();
+          ctx.arc(cx, cy, m.width * 0.5, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.strokeStyle = '#FFFFFF';
+          ctx.lineWidth = 1;
+          for (let i = 0; i < 6; i++) {
+            const a = (i / 6) * Math.PI * 2 + m.patternTimer * 0.01;
+            ctx.beginPath();
+            ctx.moveTo(cx + Math.cos(a) * m.width * 0.45, cy + Math.sin(a) * m.width * 0.45);
+            ctx.lineTo(cx + Math.cos(a) * m.width * 0.85, cy + Math.sin(a) * m.width * 0.85);
+            ctx.stroke();
+          }
+          ctx.fillStyle = '#FFFFFF';
+          ctx.beginPath();
+          ctx.arc(cx, cy, 2, 0, Math.PI * 2);
+          ctx.fill();
+          break;
       }
 
       if (m.maxHealth > 1) {
@@ -1582,13 +1638,65 @@ export class GameEngine {
         ctx.fill();
         break;
       }
+
+      case 'shell': {
+        // Hex armor shell over a blink-gated inner core. The outer shell is a
+        // thick armored hexagon; the core only glows during its REVEAL window
+        // (phase 2+), mirroring the teleporter's hidden/telegraph/revealed cycle.
+        ctx.fillStyle = boss.color;
+        ctx.shadowColor = boss.color;
+        ctx.shadowBlur = 14;
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+          const a = (i / 6) * Math.PI * 2 - Math.PI / 2;
+          const px = cx + Math.cos(a) * boss.width * 0.42;
+          const py = cy + Math.sin(a) * boss.height * 0.42;
+          if (i === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.fill();
+
+        // Armor plating: a seam breaks and plates fall off as the health bar
+        // drops through the phases (70->40->20->0 armor).
+        ctx.strokeStyle = 'rgba(255,255,255,0.25)';
+        ctx.lineWidth = 1;
+        const seamAngle = boss.phase * 0.6;
+        ctx.beginPath();
+        ctx.moveTo(cx, cy);
+        ctx.lineTo(cx + Math.cos(seamAngle) * boss.width * 0.4, cy + Math.sin(seamAngle) * boss.height * 0.4);
+        ctx.stroke();
+
+        // Inner core: hidden while the armor re-locks, glowing when revealed.
+        if (boss.coreOpen) {
+          const coreColor = boss.phase >= 3 ? '#FF44AA' : boss.phase === 2 ? '#FFAA00' : '#FFFFFF';
+          ctx.fillStyle = coreColor;
+          ctx.shadowColor = coreColor;
+          ctx.shadowBlur = 22;
+          ctx.beginPath();
+          ctx.arc(cx, cy, boss.width * 0.14, 0, Math.PI * 2);
+          ctx.fill();
+        } else {
+          // Blink telegraph when the shell has re-locked (the "armor re-seals"
+          // beat) — reads as intangible until it re-opens.
+          const pulse = (Math.sin(boss.patternTimer * 0.04) + 1) / 2;
+          ctx.strokeStyle = CONFIG.COLORS.BOSS_SHELL_CORE;
+          ctx.globalAlpha = 0.15 + pulse * 0.3;
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(cx, cy, boss.width * 0.16 + pulse * 3, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+        }
+        break;
+      }
     }
 
     const eyeY = boss.y + boss.height * 0.35;
     ctx.fillStyle = boss.phase === 3 ? '#FF00FF' : boss.phase === 2 ? '#FF6600' : '#FFFFFF';
     ctx.shadowColor = ctx.fillStyle;
     ctx.shadowBlur = 12;
-    if (boss.bossId !== 'spider' && boss.bossId !== 'turrets' && boss.bossId !== 'statue') {
+    if (boss.bossId !== 'spider' && boss.bossId !== 'turrets' && boss.bossId !== 'statue' && boss.bossId !== 'shell') {
       ctx.beginPath();
       ctx.arc(cx, eyeY, boss.width * 0.08, 0, Math.PI * 2);
       ctx.fill();

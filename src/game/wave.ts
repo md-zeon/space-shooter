@@ -15,6 +15,8 @@ export interface WaveGroup {
   aimShards?: boolean;
   shieldHp?: number;
   bottomEntry?: boolean;
+  isReward?: boolean;
+  startHidden?: boolean;
 }
 
 export interface Wave {
@@ -38,6 +40,8 @@ export interface SpawnCommand {
   aimShards?: boolean;
   shieldHp?: number;
   bottomEntry?: boolean;
+  isReward?: boolean;
+  startHidden?: boolean;
 }
 
 const FORMATION_POOL: FormationType[] = [
@@ -218,6 +222,7 @@ function getMovementPattern(formation: FormationType, type: EnemyType): string {
   if (type === 'splinterer') return 'straight';
   if (type === 'homer' || type === 'mirror' || type === 'mirrorcopy') return 'homing';
   if (type === 'healer' || type === 'leader') return 'support';
+  if (type === 'teleporter') return 'teleporter';
   switch (formation) {
     case 'line': return 'straight';
     case 'vshape': return 'straight';
@@ -233,6 +238,7 @@ function getMovementPattern(formation: FormationType, type: EnemyType): string {
 
 function getShootPattern(type: EnemyType, difficulty: number): string {
   if (type === 'splinterer') return 'none';
+  if (type === 'teleporter') return 'none';
   if (type === 'healer') return 'none';
   if (type === 'leader') return difficulty >= 6 ? 'aimed' : 'spread3';
   if (difficulty <= 2) {
@@ -635,6 +641,82 @@ export class WaveManager {
 
       // Wave 50 — BOSS: The Creature / Swimmer (BossManager handles it).
       { groups: [], isBossWave: true, isBossPrep: false },
+
+      // ===== Decade 6 (waves 51-60): Teleporter / Timing =====
+      // The new verb is TIMING / SECOND FOCUS — enemies appear and vanish, so the
+      // player can't just watch the top lane. The D6 signature entry grammar is the
+      // THREE-AXIS PINCER: threats pour in from top-left, top-right, AND the bottom
+      // simultaneously. Teleporters blink HIDDEN -> TELEGRAPH ghost -> REVEALED.
+
+      // Wave 51 — Air/recovery: re-presents D2-D5 archetypes at D1 complexity.
+      { groups: [
+        { type: 'basic', formation: 'line', count: 5, movementPattern: 'swoop', shootPattern: 'none', delay: 0 },
+        { type: 'homer', formation: 'random', count: 1, movementPattern: 'homing', shootPattern: 'none', delay: 500 },
+        { type: 'wall', formation: 'random', count: 1, movementPattern: 'wall', shootPattern: 'none', delay: 900 },
+        { type: 'basic', formation: 'pincer', count: 4, movementPattern: 'ambush', shootPattern: 'none', bottomEntry: true, delay: 1300 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 52 — FIRST TELEPORTER: it flickers with a telegraph beat before the
+      // reveal. Read the ghost, fire into the reveal gap.
+      { groups: [
+        { type: 'teleporter', formation: 'random', count: 1, movementPattern: 'teleporter', shootPattern: 'none', delay: 0 },
+        { type: 'basic', formation: 'line', count: 5, movementPattern: 'swoop', shootPattern: 'none', delay: 400 },
+        { type: 'basic', formation: 'pincer', count: 4, movementPattern: 'ambush', shootPattern: 'none', bottomEntry: true, delay: 1000 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 53 — Teleporter + swarmers: the flicker hides the swarm's approach.
+      { groups: [
+        { type: 'teleporter', formation: 'random', count: 2, movementPattern: 'teleporter', shootPattern: 'none', delay: 0 },
+        { type: 'basic', formation: 'line', count: 8, movementPattern: 'swoop', shootPattern: 'none', delay: 600 },
+        { type: 'rusher', formation: 'pincer', count: 4, movementPattern: 'rusher', shootPattern: 'none', bottomEntry: true, delay: 1100 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 54 — Teleporter + half-teleporting wall: only pieces of the barricade
+      // are solid at any moment. Thread through the gaps.
+      { groups: [
+        { type: 'teleporter', formation: 'random', count: 3, movementPattern: 'teleporter', shootPattern: 'none', delay: 0 },
+        { type: 'wall', formation: 'line', count: 4, movementPattern: 'wall', shootPattern: 'none', delay: 500 },
+        { type: 'advanced', formation: 'pincer', count: 4, movementPattern: 'ambush', shootPattern: 'aimed', bottomEntry: true, delay: 1300 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 55 — REWARD teleporter: a bonus target that is only hittable during
+      // its brief reveal. Kill it in-window for a huge payout.
+      { groups: [
+        { type: 'teleporter', formation: 'random', count: 1, movementPattern: 'teleporter', shootPattern: 'none', isReward: true, hp: 1, delay: 0 },
+        { type: 'basic', formation: 'line', count: 6, movementPattern: 'swoop', shootPattern: 'none', delay: 700 },
+        { type: 'homer', formation: 'random', count: 1, movementPattern: 'homing', shootPattern: 'none', delay: 1100 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 56 — Teleporter + homer: vanish/reappear while a seeker bears down.
+      { groups: [
+        { type: 'teleporter', formation: 'random', count: 2, movementPattern: 'teleporter', shootPattern: 'none', delay: 0 },
+        { type: 'homer', formation: 'random', count: 2, movementPattern: 'homing', shootPattern: 'none', delay: 400 },
+        { type: 'basic', formation: 'pincer', count: 6, movementPattern: 'ambush', shootPattern: 'none', bottomEntry: true, delay: 1000 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 57 — Teleporter + elite: timing pressure meets concentrated fire.
+      { groups: [
+        { type: 'teleporter', formation: 'random', count: 2, movementPattern: 'teleporter', shootPattern: 'none', delay: 0 },
+        { type: 'elite', formation: 'random', count: 1, movementPattern: 'hover', shootPattern: 'spread5', delay: 500 },
+        { type: 'advanced', formation: 'line', count: 4, movementPattern: 'swoop', shootPattern: 'aimed', delay: 1000 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 58 — TWO teleporters + swarm + elite: the full focus test. Watch the
+      // ghosts, the swarm, AND the bottom pincer at once.
+      { groups: [
+        { type: 'teleporter', formation: 'random', count: 2, movementPattern: 'teleporter', shootPattern: 'none', delay: 0 },
+        { type: 'basic', formation: 'line', count: 7, movementPattern: 'swoop', shootPattern: 'none', delay: 700 },
+        { type: 'elite', formation: 'random', count: 1, movementPattern: 'hover', shootPattern: 'spread5', delay: 1000 },
+        { type: 'rusher', formation: 'pincer', count: 5, movementPattern: 'rusher', shootPattern: 'none', bottomEntry: true, delay: 1500 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 59 — Calm / pre-boss relief: breathing room before the Shell.
+      { groups: [
+        { type: 'basic', formation: 'line', count: 4, movementPattern: 'straight', shootPattern: 'none', delay: 0 },
+      ], isBossWave: false, isBossPrep: true },
+
+      // Wave 60 — BOSS: The Shell -> Inner Core (BossManager handles it).
+      { groups: [], isBossWave: true, isBossPrep: false },
     ];
 
     for (let i = 0; i < authored.length; i++) {
@@ -711,6 +793,8 @@ export class WaveManager {
           aimShards: group.aimShards,
           shieldHp: group.shieldHp,
           bottomEntry: group.bottomEntry,
+          isReward: group.isReward,
+          startHidden: group.startHidden,
         });
       }
     }
