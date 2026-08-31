@@ -30,6 +30,7 @@ const ENEMY_BULLET_SIZES: Record<string, { w: number; h: number }> = {
 };
 
 export class BulletPool {
+  private static readonly SENTINEL: Bullet = { x: 0, y: 0, width: 0, height: 0, speed: 0, vx: 0, vy: 0, isPlayer: false, active: false, bulletType: 'straight' };
   private pool: Bullet[] = [];
   private active: Bullet[] = [];
 
@@ -85,13 +86,7 @@ export class BulletPool {
     // growing the pool unbounded — the most visually dense patterns (the boss
     // "sun" shockwave) must never tank mobile frame rate.
     if (this.active.length >= CONFIG.MAX_ENEMY_BULLETS) {
-      // Hand back an inactive bullet so callers (which ignore the return value)
-      // stay simple; inactive bullets are skipped everywhere.
-      let bullet = this.pool.pop();
-      if (!bullet) bullet = this.create();
-      bullet.isPlayer = false;
-      bullet.active = false;
-      return bullet;
+      return BulletPool.SENTINEL;
     }
 
     let bullet = this.pool.pop();
@@ -123,8 +118,8 @@ export class BulletPool {
     const index = this.active.indexOf(bullet);
     if (index > -1) {
       this.active.splice(index, 1);
+      this.pool.push(bullet);
     }
-    this.pool.push(bullet);
   }
 
   update(deltaTime: number, canvasWidth: number, canvasHeight: number) {

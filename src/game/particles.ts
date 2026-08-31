@@ -10,6 +10,7 @@ export interface Particle {
   size: number;
   color: string;
   active: boolean;
+  gravity: number;
 }
 
 export class ParticleSystem {
@@ -33,7 +34,7 @@ export class ParticleSystem {
     return {
       x: 0, y: 0, vx: 0, vy: 0,
       life: 0, decay: 0, size: 0,
-      color: '', active: false,
+      color: '', active: false, gravity: 0,
     };
   }
 
@@ -71,6 +72,7 @@ export class ParticleSystem {
       particle.y = y;
       particle.vx = Math.cos(angle) * velocity;
       particle.vy = Math.sin(angle) * velocity + gravity;
+      particle.gravity = gravity;
       particle.life = 1;
       particle.decay = baseDecay + Math.random() * 0.02;
       particle.size = baseSize + Math.random() * 2;
@@ -116,7 +118,7 @@ export class ParticleSystem {
 
       particle.x += particle.vx * dt60;
       particle.y += particle.vy * dt60;
-      particle.vy += 0.05 * dt60;
+      particle.vy += particle.gravity * dt60;
       particle.vx *= 0.98;
       particle.life -= particle.decay * dt60;
 

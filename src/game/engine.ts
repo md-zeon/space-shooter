@@ -206,7 +206,7 @@ export class GameEngine {
             break;
           }
           const item = this.renderer.hitTestMenu(click.x, click.y);
-          if (item?.id === 'PLAY' || item?.label === '▶  PLAY') this.startGame();
+          if (item?.label === '▶  PLAY') this.startGame();
           else if (item?.label === '◄') this.toggleShipSkin();
           else if (item?.label === '►') this.toggleShipSkin();
           else if (item?.label === 'SOUND ON' || item?.label === 'MUTED') this.toggleMute();
@@ -236,6 +236,7 @@ export class GameEngine {
         if (this.input.isKeyJustPressed('Escape') || this.input.consumeBackButton()) {
           this.audio.playUIPause();
           this.state = 'paused';
+          break;
         }
     if (this.input.isKeyJustPressed('b') || this.input.isKeyJustPressed('B')) {
       this.activateBomb();
@@ -292,7 +293,7 @@ export class GameEngine {
   private updateWaveSpawning(deltaTime: number) {
     if (this.boss.isBossActive() || this.warningActive || this.bossDefeatTimer > 0) return;
 
-    const activeEnemyCount = this.enemies.countActive();
+    const activeEnemyCount = this.enemies.countForSpawnCap();
     if (activeEnemyCount >= 30) return;
 
     const spawnCommands = this.waves.update(deltaTime, activeEnemyCount, CONFIG.WIDTH);
@@ -1009,9 +1010,7 @@ export class GameEngine {
     // window suits touch play. Players can disable it in the pause menu for
     // score-purist runs. When off, the hit proceeds directly to the life loss.
     if (this.autoBomb && this.player.bombs > 0) {
-      this.player.bombs--;
       this.activateBomb();
-      this.audio.playBomb();
       this.player.isInvincible = true;
       this.player.invincibleTimer = CONFIG.INVINCIBLE_DURATION;
       return;
@@ -1120,6 +1119,7 @@ export class GameEngine {
   private startGame() {
     this.state = 'playing';
     this.audio.stopMenuMusic();
+    this.accumulator = 0;
     this.score = 0;
     this.chain = 0;
     this.chainTimer = 0;

@@ -37,6 +37,7 @@ export interface Enemy {
   chargeTimer: number;
   reflecting: boolean;
   reflectTimer: number;
+  healTimer: number;
 }
 
 /** A tile of an enemy that must be stripped (shield/armor) before core damage. */
@@ -134,6 +135,7 @@ export class EnemyManager {
       chargeTimer: 0,
       reflecting: isReflector && Math.random() < 0.5,
       reflectTimer: Math.random() * 2600,
+      healTimer: 0,
     });
 
     if (formationId >= 0 && !this.formationOrigins.has(formationId)) {
@@ -251,15 +253,17 @@ export class EnemyManager {
         }
         break;
 
-      case 'support':
-        if (origin.y < 60) {
+      case 'support': {
+        const supportEps = 1.5;
+        if (origin.y < 60 - supportEps) {
           origin.y += speed * 0.5;
-        } else if (origin.y > 60) {
+        } else if (origin.y > 60 + supportEps) {
           origin.y -= speed * 0.4;
         } else {
           origin.x += Math.sin(origin.patternTimer * 0.002) * 1.5;
         }
         break;
+      }
 
       case 'teleport': {
         if (origin.patternTimer > 3000) {
@@ -305,6 +309,7 @@ export class EnemyManager {
       }
 
       enemy.patternTimer += deltaTime * 1000;
+      enemy.healTimer += deltaTime * 1000;
       enemy.shootTimer += deltaTime * 1000;
       if (enemy.flashTimer > 0) enemy.flashTimer -= deltaTime * 1000;
 
@@ -450,9 +455,10 @@ export class EnemyManager {
             // Backline medic / leader: descends to the FAR top band, then shuffles
             // side to side — the player must reach it through the escort shield.
             const hoverY = 60 + Math.sin(enemy.patternTimer * 0.001) * 14;
-            if (enemy.y < hoverY) {
+            const hoverEps = 1.5;
+            if (enemy.y < hoverY - hoverEps) {
               enemy.y += speed * 0.5;
-            } else if (enemy.y > hoverY) {
+            } else if (enemy.y > hoverY + hoverEps) {
               enemy.y -= speed * 0.4;
             } else {
               enemy.x += Math.sin(enemy.patternTimer * 0.002) * 1.5;
@@ -634,8 +640,8 @@ export class EnemyManager {
       if (!isHealer && !isLeader) continue;
 
       const healEvery = isHealer ? 2500 : 1800;
-      if (ally.patternTimer < healEvery) continue;
-      ally.patternTimer = 0;
+      if (ally.healTimer < healEvery) continue;
+      ally.healTimer = 0;
       const ax = ally.x + ally.width / 2;
       const ay = ally.y + ally.height / 2;
       for (const e of this.enemies) {
@@ -821,6 +827,7 @@ export class EnemyManager {
         chargeTimer: 0,
         reflecting: false,
         reflectTimer: 0,
+        healTimer: 0,
       };
       this.enemies.push(copy);
     }
@@ -1356,6 +1363,22 @@ export class EnemyManager {
   countActive(): number {
     let c = 0;
     for (const e of this.enemies) if (e.active) c++;
+    return c;
+  }
+
+  /**
+   * Count of active enemies that count toward the spawn cap. Indestructible
+   * static terrain is excluded — it can never be destroyed, so without this a
+   * lingering block could keep `waves.update` gated off forever and the boss
+   * would never trigger.
+   */
+  countForSpawnCap(): number {
+    let c = 0;
+    for (const e of this.enemies) {
+      if (!e.active) continue;
+      if (e.type === 'terrain' && e.indestructible) continue;
+      c++;
+    }
     return c;
   }
 

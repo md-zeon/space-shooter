@@ -271,6 +271,7 @@ export class WaveManager {
   private currentWaveIndex: number = 0;
   private pendingSpawns: SpawnCommand[] = [];
   private spawnDelay: number = 0;
+  private nextSpawnTime: number = 0;
   private betweenWaves: boolean = false;
   private betweenWaveTimer: number = 0;
   private difficulty: number = 1;
@@ -1171,11 +1172,12 @@ export class WaveManager {
       return [];
     }
 
-    this.spawnDelay -= deltaTime * 1000;
+    this.spawnDelay -= Math.min(deltaTime * 1000, 100);
     while (this.pendingSpawns.length > 0 && this.spawnDelay <= 0) {
+      if (this.nextSpawnTime > -this.spawnDelay) break;
       const cmd = this.pendingSpawns.shift()!;
       newSpawns.push(cmd);
-      this.spawnDelay += 80;
+      this.nextSpawnTime += Math.max(cmd.delay, 50);
     }
 
     if (this.pendingSpawns.length === 0 && newSpawns.length === 0 && !this.betweenWaves) {
@@ -1204,6 +1206,7 @@ export class WaveManager {
     const commands = this.getSpawnCommands(wave, canvasWidth);
     this.pendingSpawns = commands;
     this.spawnDelay = 0;
+    this.nextSpawnTime = 0;
   }
 
   getWaveAnnouncement(): { wave: number; isBoss: boolean } | null {
@@ -1225,6 +1228,7 @@ export class WaveManager {
     this.currentWaveIndex = 0;
     this.pendingSpawns = [];
     this.spawnDelay = 0;
+    this.nextSpawnTime = 0;
     this.betweenWaves = false;
     this.betweenWaveTimer = 0;
     this.difficulty = 1;

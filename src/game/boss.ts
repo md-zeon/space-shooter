@@ -655,7 +655,7 @@ export class BossManager {
           const rTop = this.boss.y + this.boss.height * 0.3;
           if (Math.floor(this.boss.patternTimer / 260) > Math.floor((this.boss.patternTimer - deltaTime * 1000) / 260)) {
             const lBase = Math.atan2(CONFIG.HEIGHT - eyeY, playerX - lx);
-            const rBase = Math.atan2(CONFIG.HEIGHT - eyeY, (CONFIG.WIDTH - playerX) - rx);
+            const rBase = Math.atan2(CONFIG.HEIGHT - eyeY, playerX - rx);
             requests.push({ x: lx, y: lTop, angle: lBase - 0.12, speed: 5.5, type: 'laser' });
             requests.push({ x: rx, y: rTop, angle: rBase + 0.12, speed: 5.5, type: 'laser' });
           }
