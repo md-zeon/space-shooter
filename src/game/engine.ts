@@ -1229,6 +1229,22 @@ export class GameEngine {
           ctx.closePath();
           ctx.fill();
           break;
+
+        case 'mirror':
+          ctx.fillStyle = '#FF77CC';
+          ctx.shadowColor = '#FF77CC';
+          ctx.shadowBlur = 10;
+          ctx.beginPath();
+          ctx.moveTo(cx, m.y + m.height);
+          ctx.lineTo(m.x + m.width, m.y);
+          ctx.lineTo(m.x, m.y);
+          ctx.closePath();
+          ctx.fill();
+          ctx.fillStyle = '#FFFFFF';
+          ctx.beginPath();
+          ctx.arc(cx, cy, 2, 0, Math.PI * 2);
+          ctx.fill();
+          break;
       }
 
       if (m.maxHealth > 1) {
@@ -1377,6 +1393,71 @@ export class GameEngine {
         break;
       }
 
+      case 'statue': {
+        // The face IS the boss: a rigid totemic head. The two ring-firing EYES
+        // are the weak points (bright/circular), and the mouth "opens" in the
+        // death phase to telegraph the charged wide beam.
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, boss.width * 0.5, boss.height * 0.46, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Head band / crown (helps the silhouette read as a totem).
+        ctx.fillStyle = boss.color;
+        ctx.globalAlpha = 0.6;
+        ctx.fillRect(boss.x + boss.width * 0.16, boss.y + boss.height * 0.06, boss.width * 0.68, boss.height * 0.14);
+        ctx.globalAlpha = 1;
+
+        // Eyes — the bright, circular weak points. Ring-glow pulses with charge.
+        const eyeY = boss.y + boss.height * 0.34;
+        const eyeRX = boss.width * 0.11;
+        const leftEX = cx - boss.width * 0.22;
+        const rightEX = cx + boss.width * 0.22;
+        const eyeOn = boss.phase >= 1;
+        // In phase B onward BOTH eyes are lit (cross-fire); before that one glows.
+        const leftLit = eyeOn;
+        const rightLit = boss.phase >= 2;
+        const charge = (Math.sin(boss.patternTimer * 0.004) + 1) / 2;
+        ctx.fillStyle = '#FFFFFF';
+        ctx.shadowColor = '#FFFFFF';
+        ctx.shadowBlur = 14;
+        const drawEye = (ex: number, lit: boolean) => {
+          ctx.beginPath();
+          ctx.arc(ex, eyeY, eyeRX, 0, Math.PI * 2);
+          ctx.fill();
+          if (lit) {
+            ctx.fillStyle = '#FF3B3B';
+            ctx.shadowColor = '#FF3B3B';
+            ctx.shadowBlur = 18 + charge * 8;
+            ctx.beginPath();
+            ctx.arc(ex, eyeY, eyeRX * 0.45, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          // Ring around the eye — the "ring-firing" motif.
+          ctx.strokeStyle = lit ? '#FF6644' : '#664433';
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.arc(ex, eyeY, eyeRX * 1.7, boss.patternTimer * 0.002, boss.patternTimer * 0.002 + Math.PI * 1.5);
+          ctx.stroke();
+          ctx.fillStyle = '#FFFFFF';
+          ctx.shadowColor = '#FFFFFF';
+          ctx.shadowBlur = 14;
+        };
+        drawEye(leftEX, leftLit);
+        drawEye(rightEX, rightLit);
+
+        // Mouth — closed at phase 1-2, "opens" in phase 3 to telegraph the beam.
+        const mouthY = boss.y + boss.height * 0.72;
+        const mouthOpen = boss.phase >= 3 ? 0.4 : 0.12;
+        ctx.fillStyle = boss.phase >= 3 ? '#FF0000' : '#333333';
+        ctx.shadowColor = boss.phase >= 3 ? '#FF0000' : 'transparent';
+        ctx.shadowBlur = boss.phase >= 3 ? 16 : 0;
+        ctx.beginPath();
+        ctx.ellipse(cx, mouthY, boss.width * 0.3, boss.height * 0.12 * mouthOpen * 3 + 5, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        break;
+      }
+
       case 'omega': {
         ctx.fillRect(boss.x, boss.y, boss.width, boss.height);
 
@@ -1427,7 +1508,7 @@ export class GameEngine {
     ctx.fillStyle = boss.phase === 3 ? '#FF00FF' : boss.phase === 2 ? '#FF6600' : '#FFFFFF';
     ctx.shadowColor = ctx.fillStyle;
     ctx.shadowBlur = 12;
-    if (boss.bossId !== 'spider' && boss.bossId !== 'turrets') {
+    if (boss.bossId !== 'spider' && boss.bossId !== 'turrets' && boss.bossId !== 'statue') {
       ctx.beginPath();
       ctx.arc(cx, eyeY, boss.width * 0.08, 0, Math.PI * 2);
       ctx.fill();

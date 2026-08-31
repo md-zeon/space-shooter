@@ -14,6 +14,7 @@ export interface WaveGroup {
   hp?: number;
   aimShards?: boolean;
   shieldHp?: number;
+  bottomEntry?: boolean;
 }
 
 export interface Wave {
@@ -36,6 +37,7 @@ export interface SpawnCommand {
   hp?: number;
   aimShards?: boolean;
   shieldHp?: number;
+  bottomEntry?: boolean;
 }
 
 const FORMATION_POOL: FormationType[] = [
@@ -46,18 +48,21 @@ const FORMATION_POOL: FormationType[] = [
 function generateFormation(
   formation: FormationType,
   count: number,
-  canvasWidth: number
+  canvasWidth: number,
+  fromBottom: boolean = false
 ): { x: number; y: number }[] {
   const positions: { x: number; y: number }[] = [];
   const margin = 40;
   const usableWidth = canvasWidth - margin * 2;
+  // Bottom-entry ambushes spawn BELOW the playfield and rise up into view.
+  const baseY = fromBottom ? CONFIG.HEIGHT + 40 : -CONFIG.ENEMY_HEIGHT;
 
   switch (formation) {
     case 'random':
       for (let i = 0; i < count; i++) {
         positions.push({
           x: margin + Math.random() * usableWidth,
-          y: -CONFIG.ENEMY_HEIGHT - Math.random() * 50,
+          y: baseY + (fromBottom ? -Math.random() * 50 : -Math.random() * 50),
         });
       }
       break;
@@ -68,7 +73,7 @@ function generateFormation(
       for (let i = 0; i < count; i++) {
         positions.push({
           x: startX + i * spacing - CONFIG.ENEMY_WIDTH / 2,
-          y: -CONFIG.ENEMY_HEIGHT,
+          y: baseY,
         });
       }
       break;
@@ -81,7 +86,7 @@ function generateFormation(
         const offset = i - half;
         positions.push({
           x: centerX + offset * 40 - CONFIG.ENEMY_WIDTH / 2,
-          y: -CONFIG.ENEMY_HEIGHT - Math.abs(offset) * 30,
+          y: baseY - Math.abs(offset) * 30,
         });
       }
       break;
@@ -91,10 +96,10 @@ function generateFormation(
       const cx = canvasWidth / 2;
       if (count <= 4) {
         const diamondPos = [
-          { x: cx - CONFIG.ENEMY_WIDTH / 2, y: -CONFIG.ENEMY_HEIGHT },
-          { x: cx - 40, y: -CONFIG.ENEMY_HEIGHT - 30 },
-          { x: cx + 10, y: -CONFIG.ENEMY_HEIGHT - 30 },
-          { x: cx - CONFIG.ENEMY_WIDTH / 2, y: -CONFIG.ENEMY_HEIGHT - 60 },
+          { x: cx - CONFIG.ENEMY_WIDTH / 2, y: baseY },
+          { x: cx - 40, y: baseY - 30 },
+          { x: cx + 10, y: baseY - 30 },
+          { x: cx - CONFIG.ENEMY_WIDTH / 2, y: baseY - 60 },
         ];
         for (let i = 0; i < count; i++) {
           positions.push(diamondPos[i]);
@@ -105,15 +110,15 @@ function generateFormation(
         let placed = 0;
         for (let i = 0; i < half && placed < count; i++) {
           const xOff = i * spacing * 0.7;
-          positions.push({ x: cx - xOff - CONFIG.ENEMY_WIDTH / 2, y: -CONFIG.ENEMY_HEIGHT - i * spacing });
+          positions.push({ x: cx - xOff - CONFIG.ENEMY_WIDTH / 2, y: baseY - i * spacing });
           placed++;
           if (placed < count) {
-            positions.push({ x: cx + xOff - CONFIG.ENEMY_WIDTH / 2, y: -CONFIG.ENEMY_HEIGHT - i * spacing });
+            positions.push({ x: cx + xOff - CONFIG.ENEMY_WIDTH / 2, y: baseY - i * spacing });
             placed++;
           }
         }
         if (placed < count) {
-          positions.push({ x: cx - CONFIG.ENEMY_WIDTH / 2, y: -CONFIG.ENEMY_HEIGHT - half * spacing });
+          positions.push({ x: cx - CONFIG.ENEMY_WIDTH / 2, y: baseY - half * spacing });
         }
       }
       break;
@@ -125,13 +130,13 @@ function generateFormation(
       for (let i = 0; i < half; i++) {
         positions.push({
           x: margin,
-          y: -CONFIG.ENEMY_HEIGHT - i * spacing,
+          y: baseY - i * spacing,
         });
       }
       for (let i = 0; i < count - half; i++) {
         positions.push({
           x: canvasWidth - margin - CONFIG.ENEMY_WIDTH,
-          y: -CONFIG.ENEMY_HEIGHT - i * spacing,
+          y: baseY - i * spacing,
         });
       }
       break;
@@ -147,7 +152,7 @@ function generateFormation(
         for (let c = 0; c < cols && placed < count; c++) {
           positions.push({
             x: margin + spacingX * (c + 1) - CONFIG.ENEMY_WIDTH / 2,
-            y: -CONFIG.ENEMY_HEIGHT - r * spacingY,
+            y: baseY - r * spacingY,
           });
           placed++;
         }
@@ -162,7 +167,7 @@ function generateFormation(
         const angle = (i / count) * Math.PI * 2;
         positions.push({
           x: centerX + Math.cos(angle) * radius - CONFIG.ENEMY_WIDTH / 2,
-          y: -CONFIG.ENEMY_HEIGHT - 40 + Math.sin(angle) * radius,
+          y: baseY - 40 + Math.sin(angle) * radius,
         });
       }
       break;
@@ -176,7 +181,7 @@ function generateFormation(
         const radius = 30 + t * 50;
         positions.push({
           x: centerX + Math.cos(angle) * radius - CONFIG.ENEMY_WIDTH / 2,
-          y: -CONFIG.ENEMY_HEIGHT - 20 - t * 80,
+          y: baseY - 20 - t * 80,
         });
       }
       break;
@@ -189,7 +194,7 @@ function generateFormation(
       for (let i = 0; i < armLen; i++) {
         positions.push({
           x: centerX - CONFIG.ENEMY_WIDTH / 2,
-          y: -CONFIG.ENEMY_HEIGHT - i * spacing,
+          y: baseY - i * spacing,
         });
       }
       const remaining = count - armLen;
@@ -198,7 +203,7 @@ function generateFormation(
         const pos = i % Math.ceil(remaining / 2);
         positions.push({
           x: centerX + side * (pos + 1) * spacing - CONFIG.ENEMY_WIDTH / 2,
-          y: -CONFIG.ENEMY_HEIGHT - armLen * spacing,
+          y: baseY - armLen * spacing,
         });
       }
       break;
@@ -211,6 +216,7 @@ function generateFormation(
 function getMovementPattern(formation: FormationType, type: EnemyType): string {
   if (type === 'elite') return 'hover';
   if (type === 'splinterer') return 'straight';
+  if (type === 'homer' || type === 'mirror' || type === 'mirrorcopy') return 'homing';
   switch (formation) {
     case 'line': return 'straight';
     case 'vshape': return 'straight';
@@ -474,6 +480,82 @@ export class WaveManager {
 
       // Wave 30 — BOSS: The Turret-Cruiser (BossManager handles it).
       { groups: [], isBossWave: true, isBossPrep: false },
+
+      // ===== Decade 4 (waves 31-40): Mirror / Homing archetype =====
+      // New verb: baiting & reactive movement — you don't dodge the homer, you
+      // STEER it into clean space. D4 signature entry grammar: bottom-entry
+      // ambushes (enemies rise from beneath and swing down on you).
+
+      // Wave 31 — Air/recovery after boss 30: recap D3 splinters lightly, reset.
+      { groups: [
+        { type: 'basic', formation: 'line', count: 5, movementPattern: 'swoop', shootPattern: 'none', delay: 0 },
+        { type: 'splinterer', formation: 'vshape', count: 2, movementPattern: 'straight', shootPattern: 'none', delay: 500 },
+        { type: 'advanced', formation: 'line', count: 3, movementPattern: 'straight', shootPattern: 'aimed', delay: 900 },
+        { type: 'basic', formation: 'pincer', count: 4, shootPattern: 'none', bottomEntry: true, movementPattern: 'ambush', delay: 1400 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 32 — FIRST HOMER: a single steerable homing missile (bounded turn
+      // rate, so it's fair). Bait it into a corner while it trails you.
+      { groups: [
+        { type: 'homer', formation: 'random', count: 1, movementPattern: 'homing', shootPattern: 'none', delay: 0 },
+        { type: 'basic', formation: 'line', count: 4, movementPattern: 'straight', shootPattern: 'none', delay: 500 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 33 — Homers + swarmers: the swarm is fodder; the homer is the puzzle.
+      { groups: [
+        { type: 'homer', formation: 'random', count: 2, movementPattern: 'homing', shootPattern: 'none', delay: 0 },
+        { type: 'basic', formation: 'line', count: 8, movementPattern: 'swoop', shootPattern: 'none', delay: 300 },
+        { type: 'basic', formation: 'line', count: 6, movementPattern: 'straight', shootPattern: 'none', delay: 1000 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 34 — Homing + wall: reroute the lane while a homer follows.
+      { groups: [
+        { type: 'homer', formation: 'random', count: 1, movementPattern: 'homing', shootPattern: 'none', delay: 0 },
+        { type: 'wall', formation: 'random', count: 2, movementPattern: 'wall', shootPattern: 'none', delay: 300 },
+        { type: 'basic', formation: 'line', count: 5, movementPattern: 'swoop', shootPattern: 'none', delay: 900 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 35 — FIRST MIRROR: one copy per NON-lethal hit until killed.
+      // Teaches burst discipline — tickle it and it floods, finish it decisively.
+      { groups: [
+        { type: 'mirror', formation: 'random', count: 1, movementPattern: 'homing', shootPattern: 'none', delay: 0 },
+        { type: 'basic', formation: 'line', count: 5, movementPattern: 'straight', shootPattern: 'none', delay: 600 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 36 — Homers that BRACKET at player x (bait a reversal): they trail
+      // your column, so crossing through them is the dodge.
+      { groups: [
+        { type: 'homer', formation: 'random', count: 3, movementPattern: 'homing', speed: CONFIG.ENEMY_SPEED + 0.8, shootPattern: 'none', delay: 0 },
+        { type: 'basic', formation: 'pincer', count: 4, movementPattern: 'sinewave', shootPattern: 'none', delay: 700 },
+        { type: 'basic', formation: 'line', count: 4, movementPattern: 'straight', shootPattern: 'none', delay: 1200 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 37 — Mirror + splinterer combo (mirror becomes the nightmare choice).
+      { groups: [
+        { type: 'mirror', formation: 'random', count: 1, movementPattern: 'homing', shootPattern: 'none', delay: 0 },
+        { type: 'wall', formation: 'random', count: 1, movementPattern: 'wall', shootPattern: 'none', delay: 300 },
+        { type: 'splinterer', formation: 'vshape', count: 3, movementPattern: 'straight', shootPattern: 'none', aimShards: true, delay: 700 },
+        { type: 'basic', formation: 'line', count: 4, movementPattern: 'swoop', shootPattern: 'none', delay: 1100 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 38 — First ELITE of the decade (Brotato +1/decade): a bigger, faster
+      // turn-rate homer that MUST be focused — elite triage.
+      { groups: [
+        { type: 'elite', formation: 'random', count: 1, movementPattern: 'homing', shootPattern: 'spiral', delay: 0 },
+        { type: 'homer', formation: 'random', count: 2, movementPattern: 'homing', shootPattern: 'none', delay: 400 },
+        { type: 'basic', formation: 'line', count: 5, movementPattern: 'straight', shootPattern: 'none', delay: 800 },
+        { type: 'basic', formation: 'pincer', count: 4, shootPattern: 'none', bottomEntry: true, movementPattern: 'ambush', delay: 1300 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 39 — Calm / pre-boss relief: light bottom-entry ambush, breathing room.
+      { groups: [
+        { type: 'basic', formation: 'line', count: 4, movementPattern: 'straight', shootPattern: 'none', delay: 0 },
+        { type: 'homer', formation: 'random', count: 1, movementPattern: 'homing', shootPattern: 'none', delay: 700 },
+        { type: 'basic', formation: 'pincer', count: 4, movementPattern: 'ambush', shootPattern: 'none', bottomEntry: true, delay: 1200 },
+      ], isBossWave: false, isBossPrep: true },
+
+      // Wave 40 — BOSS: The Statue / Face (BossManager handles it).
+      { groups: [], isBossWave: true, isBossPrep: false },
     ];
 
     for (let i = 0; i < authored.length; i++) {
@@ -525,7 +607,7 @@ export class WaveManager {
     const commands: SpawnCommand[] = [];
 
     for (const group of wave.groups) {
-      const positions = generateFormation(group.formation, group.count, canvasWidth);
+      const positions = generateFormation(group.formation, group.count, canvasWidth, group.bottomEntry);
       const movement = group.movementPattern || getMovementPattern(group.formation, group.type);
       const shootPattern = group.shootPattern || getShootPattern(group.type, this.difficulty);
       const speed = group.speed ?? CONFIG.ENEMY_SPEED + Math.random() * this.difficulty * 0.3;
@@ -549,6 +631,7 @@ export class WaveManager {
           hp: group.hp,
           aimShards: group.aimShards,
           shieldHp: group.shieldHp,
+          bottomEntry: group.bottomEntry,
         });
       }
     }

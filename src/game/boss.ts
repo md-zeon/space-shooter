@@ -1,9 +1,9 @@
 import { CONFIG } from './config';
 
 export type BossPhase = 1 | 2 | 3;
-export type BossAttackType = 'radial' | 'aimed_stream' | 'spiral' | 'fan' | 'laser' | 'ring' | 'composite' | 'shockwave' | 'soundwave';
-export type BossId = 'cipher' | 'spider' | 'turrets' | 'omega' | 'abyss';
-export type MinionType = 'basic' | 'shooter' | 'shield' | 'rusher';
+export type BossAttackType = 'radial' | 'aimed_stream' | 'spiral' | 'fan' | 'laser' | 'ring' | 'composite' | 'shockwave' | 'soundwave' | 'crossfire';
+export type BossId = 'cipher' | 'spider' | 'turrets' | 'statue' | 'omega' | 'abyss';
+export type MinionType = 'basic' | 'shooter' | 'shield' | 'rusher' | 'mirror';
 
 export interface BossBulletRequest {
   x: number;
@@ -94,6 +94,12 @@ const BOSS_DEFS: BossDef[] = [
     color: CONFIG.COLORS.BOSS_TURRET, baseHp: 200, speed: 1.2, targetY: 50,
     attacks: ['fan', 'laser', 'shockwave', 'radial'],
     minionTypes: ['shield', 'shooter'], minionCount: 3, minionInterval: 4000,
+  },
+  {
+    id: 'statue', name: 'STATUE', width: 120, height: 100,
+    color: CONFIG.COLORS.BOSS_STATUE, baseHp: 240, speed: 0.6, targetY: 55,
+    attacks: ['laser', 'aimed_stream', 'fan', 'ring', 'shockwave', 'soundwave', 'crossfire'],
+    minionTypes: ['mirror'], minionCount: 2, minionInterval: 5000,
   },
   {
     id: 'omega', name: 'OMEGA', width: 110, height: 80,
@@ -276,6 +282,14 @@ export class BossManager {
           this.boss.targetX = canvasWidth / 2 - this.boss.width / 2 + (Math.random() - 0.5) * 160;
         }
         break;
+      case 'statue':
+        // The face is a totem — it mostly holds the center band, only nudging
+        // sideways so the lattice angles differently. The eyes are the action.
+        if (this.boss.moveTimer > 4200) {
+          this.boss.moveTimer = 0;
+          this.boss.targetX = canvasWidth / 2 - this.boss.width / 2 + (Math.random() - 0.5) * 60;
+        }
+        break;
       case 'omega':
         if (this.boss.moveTimer > 5000) {
           this.boss.moveTimer = 0;
@@ -429,6 +443,23 @@ export class BossManager {
           }
           break;
         }
+        case 'crossfire': {
+          // The face's TWO eyes cross-fire a lattice: each eye throws aimed
+          // beams off-center, so the streams weave and the player must steer
+          // between their crossing rather than outrun them.
+          const eyeY = this.boss.y + this.boss.height * 0.35;
+          const lx = this.boss.x + this.boss.width * 0.22;
+          const rx = this.boss.x + this.boss.width * 0.78;
+          const lTop = this.boss.y + this.boss.height * 0.3;
+          const rTop = this.boss.y + this.boss.height * 0.3;
+          if (Math.floor(this.boss.patternTimer / 260) > Math.floor((this.boss.patternTimer - deltaTime * 1000) / 260)) {
+            const lBase = Math.atan2(CONFIG.HEIGHT - eyeY, playerX - lx);
+            const rBase = Math.atan2(CONFIG.HEIGHT - eyeY, (CONFIG.WIDTH - playerX) - rx);
+            requests.push({ x: lx, y: lTop, angle: lBase - 0.12, speed: 5.5, type: 'laser' });
+            requests.push({ x: rx, y: rTop, angle: rBase + 0.12, speed: 5.5, type: 'laser' });
+          }
+          break;
+        }
       }
 
       if (this.boss.attackDuration <= 0) {
@@ -445,9 +476,11 @@ export class BossManager {
     const phaseAttacks = def.attacks.filter(a => {
       if (a === 'aimed_stream' || a === 'spiral') return this.boss!.phase >= 1;
       if (a === 'composite') return this.boss!.phase >= 2;
-      // Laser sweeps unlock at phase 2 (the turret-cruiser's hull-laser phase,
-      // after the outer-ring assault) — never in the opener pattern.
-      if (a === 'laser') return this.boss!.phase >= 2;
+      if (a === 'crossfire') return this.boss!.phase >= 2;
+      // Laser sweeps unlock at phase 2 for the cruiser (never in the opener).
+      // The Statue, however, is the "eye-beam" boss — one eye beams from phase 1,
+      // and only the double-eye CROSSFIRE waits for phase 2. Laser is always on.
+      if (a === 'laser') return def.id === 'statue' || this.boss!.phase >= 2;
       return true;
     });
     return phaseAttacks.length > 0 ? phaseAttacks : ['radial'];
@@ -476,7 +509,7 @@ export class BossManager {
 
   private spawnMinion(type: MinionType) {
     if (!this.boss) return;
-    const health = type === 'shield' ? 3 : type === 'shooter' || type === 'rusher' ? 2 : 1;
+    const health = type === 'shield' ? 3 : type === 'shooter' || type === 'rusher' ? 2 : type === 'mirror' ? 2 : 1;
     const width = type === 'shield' ? 25 : 20;
     const height = type === 'shield' ? 25 : 20;
 
@@ -541,6 +574,17 @@ export class BossManager {
           }
           break;
         }
+
+        case 'mirror': {
+          // Mirror-shard: steers horizontally toward the player while descending
+          // — you bait it rather than outrun it. Non-lethal hits clone it.
+          const mc = m.x + m.width / 2;
+          const diff = playerX - mc;
+          m.x += Math.sign(diff) * Math.min(Math.abs(diff) * 0.02, 2 * dt60);
+          m.y += 1.6 * dt60;
+          if (m.y > CONFIG.HEIGHT + 30) m.active = false;
+          break;
+        }
       }
     }
   }
@@ -586,6 +630,19 @@ export class BossManager {
     if (minion.health <= 0) {
       minion.active = false;
       return true;
+    }
+    // Mirror-shard: a NON-lethal hit wins a clone that steers toward the player.
+    // Finish each shard decisively or the face floods the arena with mirrors.
+    if (minion.type === 'mirror' && this.boss && this.boss.minions.length < CONFIG.MAX_BOSS_MINIONS * 2) {
+      this.boss.minions.push({
+        ...minion,
+        health: 1,
+        maxHealth: 1,
+        active: true,
+        x: minion.x + 6,
+        y: minion.y + 4,
+        patternTimer: 0,
+      });
     }
     return false;
   }

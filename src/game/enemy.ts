@@ -1,6 +1,6 @@
 import { CONFIG } from './config';
 
-export type EnemyType = 'basic' | 'advanced' | 'elite' | 'wall' | 'splinterer' | 'rusher';
+export type EnemyType = 'basic' | 'advanced' | 'elite' | 'wall' | 'splinterer' | 'rusher' | 'homer' | 'mirror' | 'mirrorcopy';
 
 export interface Enemy {
   x: number;
@@ -24,6 +24,7 @@ export interface Enemy {
   offsetY: number;
   aimShards: boolean;
   shieldHp: number;
+  heading: number;
 }
 
 /** A tile of an enemy that must be stripped (shield/armor) before core damage. */
@@ -77,11 +78,12 @@ export class EnemyManager {
     const isWall = type === 'wall';
     const isSplinterer = type === 'splinterer';
     const isRusher = type === 'rusher';
-    const health = hp ?? (isWall ? 3 : type === 'elite' ? 4 : type === 'advanced' ? 2 : isSplinterer ? 1 : 1);
+    const isHomer = type === 'homer';
+    const health = hp ?? (isWall ? 3 : type === 'elite' ? 4 : type === 'advanced' ? 2 : type === 'mirror' ? 2 : isSplinterer ? 1 : 1);
     this.enemies.push({
       x, y,
-      width: isWall ? 30 : type === 'elite' ? 35 : isRusher ? 26 : CONFIG.ENEMY_WIDTH,
-      height: isWall ? 80 : type === 'elite' ? 35 : isRusher ? 26 : CONFIG.ENEMY_HEIGHT,
+      width: isWall ? 30 : type === 'elite' ? 35 : isRusher ? 26 : isHomer ? 26 : CONFIG.ENEMY_WIDTH,
+      height: isWall ? 80 : type === 'elite' ? 35 : isRusher ? 26 : isHomer ? 26 : CONFIG.ENEMY_HEIGHT,
       speed,
       health,
       maxHealth: health,
@@ -99,6 +101,7 @@ export class EnemyManager {
       offsetY,
       aimShards,
       shieldHp: shieldHp ?? 0,
+      heading: Math.PI / 2,
     });
 
     if (formationId >= 0 && !this.formationOrigins.has(formationId)) {
@@ -204,6 +207,18 @@ export class EnemyManager {
         break;
       }
 
+      case 'homing':
+        origin.y += speed * 0.8;
+        break;
+
+      case 'ambush':
+        if (origin.patternTimer < 1700) {
+          origin.y -= speed;
+        } else {
+          origin.y += speed * 1.5;
+        }
+        break;
+
       case 'teleport': {
         if (origin.patternTimer > 3000) {
           origin.x = 30 + Math.random() * (origin.canvasWidth - 60);
@@ -221,6 +236,14 @@ export class EnemyManager {
       if (origin.x < 10) origin.x = 10;
       if (origin.x > origin.canvasWidth - 90) origin.x = origin.canvasWidth - 90;
     }
+  }
+
+  private turnToward(current: number, target: number, maxTurn: number): number {
+    let diff = target - current;
+    while (diff > Math.PI) diff -= Math.PI * 2;
+    while (diff < -Math.PI) diff += Math.PI * 2;
+    const turn = Math.max(-maxTurn, Math.min(maxTurn, diff * 0.25));
+    return current + turn;
   }
 
   update(deltaTime: number, canvasWidth: number, canvasHeight: number): EnemyBulletRequest[] {
@@ -351,6 +374,33 @@ export class EnemyManager {
           case 'rusher': {
             // Dive-rusher: fast straight dive down its column (wall-runner).
             enemy.y += speed * 2.4;
+            break;
+          }
+
+          case 'homing': {
+            // Reactive homer: partial home with a bounded turn rate, so it is
+            // STEERABLE (bait it into clean space) rather than a guaranteed hit.
+            const desired = Math.atan2(
+              this.playerY - (enemy.y + enemy.height / 2),
+              this.playerX - (enemy.x + enemy.width / 2)
+            );
+            enemy.heading = this.turnToward(enemy.heading, desired, 0.12);
+            enemy.x += Math.cos(enemy.heading) * speed;
+            enemy.y += Math.sin(enemy.heading) * speed;
+            break;
+          }
+
+          case 'ambush': {
+            // Bottom-entry ambush: rises from below the screen for a beat, then
+            // swings down AND toward the player for a diving attack.
+            const riseTime = 1700;
+            if (enemy.patternTimer < riseTime) {
+              enemy.y -= speed;
+            } else {
+              enemy.y += speed * 1.5;
+              const dx = this.playerX - (enemy.x + enemy.width / 2);
+              enemy.x += Math.sign(dx) * Math.min(Math.abs(dx) * 0.01, speed * 0.6);
+            }
             break;
           }
 
@@ -497,6 +547,38 @@ export class EnemyManager {
       this.remove(enemy);
       return true;
     }
+    // Mirror: a NON-lethal hit replicates one copy that homes toward the player.
+    // This teaches burst discipline — tickle it with weak blows and it floods
+    // the screen; finish it with a decisive hit and it can't replicate.
+    if (enemy.type === 'mirror') {
+      const cx = enemy.x + enemy.width / 2;
+      const cy = enemy.y + enemy.height / 2;
+      const copy: Enemy = {
+        x: cx - enemy.width / 2,
+        y: cy - enemy.height / 2,
+        width: enemy.width,
+        height: enemy.height,
+        speed: enemy.speed,
+        health: 1,
+        maxHealth: 1,
+        type: 'mirrorcopy',
+        active: true,
+        shootTimer: 0,
+        patternTimer: 0,
+        movementPattern: 'homing',
+        shootPattern: 'none',
+        originX: cx - enemy.width / 2,
+        flashTimer: 100,
+        spawnX: cx - enemy.width / 2,
+        formationId: -1,
+        offsetX: 0,
+        offsetY: 0,
+        aimShards: false,
+        shieldHp: 0,
+        heading: Math.atan2(this.playerY - cy, this.playerX - cx),
+      };
+      this.enemies.push(copy);
+    }
     return false;
   }
 
@@ -543,6 +625,18 @@ export class EnemyManager {
         case 'rusher':
           color = CONFIG.COLORS.ENEMY_RUSHER;
           shape = 'rusher';
+          break;
+        case 'homer':
+          color = CONFIG.COLORS.ENEMY_HOMER;
+          shape = 'homer';
+          break;
+        case 'mirror':
+          color = CONFIG.COLORS.ENEMY_MIRROR;
+          shape = 'mirror';
+          break;
+        case 'mirrorcopy':
+          color = CONFIG.COLORS.ENEMY_MIRRORCOPY;
+          shape = 'mirror';
           break;
       }
 
@@ -635,6 +729,34 @@ export class EnemyManager {
         ctx.beginPath();
         ctx.arc(centerX, enemy.y + enemy.height * 0.55, 2.5, 0, Math.PI * 2);
         ctx.fill();
+      } else if (shape === 'homer') {
+        // Homing missile: a dart with a small thruster tail, carves toward player.
+        ctx.beginPath();
+        ctx.moveTo(centerX, enemy.y + enemy.height);
+        ctx.lineTo(enemy.x + enemy.width * 0.85, enemy.y + enemy.height * 0.25);
+        ctx.lineTo(centerX, enemy.y + enemy.height * 0.5);
+        ctx.lineTo(enemy.x + enemy.width * 0.15, enemy.y + enemy.height * 0.25);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = '#FF5500';
+        ctx.beginPath();
+        ctx.arc(centerX, enemy.y + enemy.height - 3, 2.5, 0, Math.PI * 2);
+        ctx.fill();
+      } else if (shape === 'mirror') {
+        // Shard: a sliver of glass that reflects — replicates a copy on hit.
+        ctx.beginPath();
+        ctx.moveTo(centerX, enemy.y);
+        ctx.lineTo(enemy.x + enemy.width, centerY);
+        ctx.lineTo(centerX, enemy.y + enemy.height);
+        ctx.lineTo(enemy.x, centerY);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(centerX, enemy.y + enemy.height * 0.25);
+        ctx.lineTo(centerX, enemy.y + enemy.height * 0.75);
+        ctx.stroke();
       } else {
         const hw = enemy.width / 2;
         const hh = enemy.height / 2;
