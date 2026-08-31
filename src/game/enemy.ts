@@ -1,6 +1,6 @@
 import { CONFIG } from './config';
 
-export type EnemyType = 'basic' | 'advanced' | 'elite' | 'wall' | 'splinterer' | 'rusher' | 'homer' | 'mirror' | 'mirrorcopy';
+export type EnemyType = 'basic' | 'advanced' | 'elite' | 'wall' | 'splinterer' | 'rusher' | 'homer' | 'mirror' | 'mirrorcopy' | 'healer' | 'leader';
 
 export interface Enemy {
   x: number;
@@ -79,11 +79,11 @@ export class EnemyManager {
     const isSplinterer = type === 'splinterer';
     const isRusher = type === 'rusher';
     const isHomer = type === 'homer';
-    const health = hp ?? (isWall ? 3 : type === 'elite' ? 4 : type === 'advanced' ? 2 : type === 'mirror' ? 2 : isSplinterer ? 1 : 1);
+    const health = hp ?? (isWall ? 3 : type === 'elite' ? 4 : type === 'leader' ? 4 : type === 'advanced' ? 2 : type === 'mirror' ? 2 : type === 'healer' ? 1 : isSplinterer ? 1 : 1);
     this.enemies.push({
       x, y,
-      width: isWall ? 30 : type === 'elite' ? 35 : isRusher ? 26 : isHomer ? 26 : CONFIG.ENEMY_WIDTH,
-      height: isWall ? 80 : type === 'elite' ? 35 : isRusher ? 26 : isHomer ? 26 : CONFIG.ENEMY_HEIGHT,
+      width: isWall ? 30 : type === 'elite' ? 35 : type === 'leader' ? 35 : isRusher ? 26 : isHomer ? 26 : CONFIG.ENEMY_WIDTH,
+      height: isWall ? 80 : type === 'elite' ? 35 : type === 'leader' ? 35 : isRusher ? 26 : isHomer ? 26 : CONFIG.ENEMY_HEIGHT,
       speed,
       health,
       maxHealth: health,
@@ -216,6 +216,16 @@ export class EnemyManager {
           origin.y -= speed;
         } else {
           origin.y += speed * 1.5;
+        }
+        break;
+
+      case 'support':
+        if (origin.y < 60) {
+          origin.y += speed * 0.5;
+        } else if (origin.y > 60) {
+          origin.y -= speed * 0.4;
+        } else {
+          origin.x += Math.sin(origin.patternTimer * 0.002) * 1.5;
         }
         break;
 
@@ -404,6 +414,21 @@ export class EnemyManager {
             break;
           }
 
+          case 'support': {
+            // Backline medic / leader: descends to the FAR top band, then shuffles
+            // side to side — the player must reach it through the escort shield.
+            const hoverY = 60 + Math.sin(enemy.patternTimer * 0.001) * 14;
+            if (enemy.y < hoverY) {
+              enemy.y += speed * 0.5;
+            } else if (enemy.y > hoverY) {
+              enemy.y -= speed * 0.4;
+            } else {
+              enemy.x += Math.sin(enemy.patternTimer * 0.002) * 1.5;
+            }
+            enemy.y = Math.max(20, enemy.y);
+            break;
+          }
+
           default:
             enemy.y += speed;
         }
@@ -431,7 +456,52 @@ export class EnemyManager {
       }
     }
 
+    this.applySupportBuffs();
+
     return bulletRequests;
+  }
+
+  /**
+   * The strategic-pivot mechanic: healer & leader allies actively maintain the
+   * local escort. Healers re-shield AND re-heal nearby allies; leaders (elites)
+   * re-shield them faster as a "resistance" buff. The player MUST kill these
+   * supports first or the surrounding enemies keep shrugging off damage.
+   */
+  private applySupportBuffs() {
+    const radius = 110;
+    for (const ally of this.enemies) {
+      if (!ally.active) continue;
+      const isHealer = ally.type === 'healer';
+      const isLeader = ally.type === 'leader';
+      if (!isHealer && !isLeader) continue;
+
+      const healEvery = isHealer ? 2500 : 1800;
+      if (ally.patternTimer < healEvery) continue;
+      ally.patternTimer = 0;
+      const ax = ally.x + ally.width / 2;
+      const ay = ally.y + ally.height / 2;
+      for (const e of this.enemies) {
+        if (!e.active || e === ally) continue;
+        if (e.type === 'healer' || e.type === 'leader') continue;
+        const ex = e.x + e.width / 2;
+        const ey = e.y + e.height / 2;
+        const dx = ex - ax;
+        const dy = ey - ay;
+        if (dx * dx + dy * dy > radius * radius) continue;
+
+        // Healer restores a defeated ally's integrity: re-shield then re-heal.
+        if (isHealer) {
+          if (e.shieldHp < 2) {
+            e.shieldHp += 1;
+          } else if (e.health < e.maxHealth) {
+            e.health = Math.min(e.maxHealth, e.health + 1);
+          }
+        } else {
+          // Leader: resistance buff — keep re-shielding nearby troops.
+          if (e.shieldHp < 1) e.shieldHp += 1;
+        }
+      }
+    }
   }
 
   private checkShoot(enemy: Enemy, canvasWidth: number, canvasHeight: number): EnemyBulletRequest[] | null {
@@ -638,6 +708,14 @@ export class EnemyManager {
           color = CONFIG.COLORS.ENEMY_MIRRORCOPY;
           shape = 'mirror';
           break;
+        case 'healer':
+          color = CONFIG.COLORS.ENEMY_HEALER;
+          shape = 'healer';
+          break;
+        case 'leader':
+          color = CONFIG.COLORS.ENEMY_LEADER;
+          shape = 'leader';
+          break;
       }
 
       ctx.fillStyle = color;
@@ -757,6 +835,53 @@ export class EnemyManager {
         ctx.moveTo(centerX, enemy.y + enemy.height * 0.25);
         ctx.lineTo(centerX, enemy.y + enemy.height * 0.75);
         ctx.stroke();
+      } else if (shape === 'healer') {
+        // Medic: a rounded support beacon with a tilted cross — reads as "the
+        // guy who keeps the others alive", and it carries its own shield ring.
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, enemy.width * 0.48, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = '#FFFFFF';
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, enemy.width * 0.28, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = color;
+        ctx.fillRect(centerX - 2, centerY - enemy.height * 0.3, 4, enemy.height * 0.6);
+        ctx.fillRect(centerX - enemy.width * 0.3, centerY - 2, enemy.width * 0.6, 4);
+      } else if (shape === 'leader') {
+        // Elite leader: a crowned hex-boss with a pulsing buff-aura ring around
+        // it (the "one to kill now" — it broadcasts the resistance buff).
+        const hw = enemy.width / 2;
+        const hh = enemy.height / 2;
+        ctx.beginPath();
+        for (let j = 0; j < 6; j++) {
+          const angle = (j / 6) * Math.PI * 2 - Math.PI / 2;
+          const px = centerX + Math.cos(angle) * hw * 0.95;
+          const py = centerY + Math.sin(angle) * hh * 0.95;
+          if (j === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.closePath();
+        ctx.fill();
+        // Crown spikes on top.
+        ctx.fillStyle = color;
+        for (let s = -1; s <= 1; s++) {
+          ctx.beginPath();
+          ctx.moveTo(centerX + s * 10 - 4, enemy.y);
+          ctx.lineTo(centerX + s * 10 + 4, enemy.y);
+          ctx.lineTo(centerX + s * 14, enemy.y - 8);
+          ctx.lineTo(centerX + s * 10 - 4, enemy.y);
+          ctx.fill();
+        }
+        // Buff-aura: pulsing ring that signals the active buff.
+        const aura = (Math.sin(enemy.patternTimer * 0.006) + 1) / 2;
+        ctx.strokeStyle = CONFIG.COLORS.ENEMY_SHIELD;
+        ctx.lineWidth = 2;
+        ctx.globalAlpha = 0.4 + aura * 0.5;
+        ctx.beginPath();
+        ctx.arc(centerX, centerY, enemy.width * 0.85 + aura * 6, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.globalAlpha = 1;
       } else {
         const hw = enemy.width / 2;
         const hh = enemy.height / 2;

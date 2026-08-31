@@ -217,6 +217,7 @@ function getMovementPattern(formation: FormationType, type: EnemyType): string {
   if (type === 'elite') return 'hover';
   if (type === 'splinterer') return 'straight';
   if (type === 'homer' || type === 'mirror' || type === 'mirrorcopy') return 'homing';
+  if (type === 'healer' || type === 'leader') return 'support';
   switch (formation) {
     case 'line': return 'straight';
     case 'vshape': return 'straight';
@@ -232,6 +233,8 @@ function getMovementPattern(formation: FormationType, type: EnemyType): string {
 
 function getShootPattern(type: EnemyType, difficulty: number): string {
   if (type === 'splinterer') return 'none';
+  if (type === 'healer') return 'none';
+  if (type === 'leader') return difficulty >= 6 ? 'aimed' : 'spread3';
   if (difficulty <= 2) {
     return type === 'elite' ? 'spread3' : 'straight';
   }
@@ -555,6 +558,82 @@ export class WaveManager {
       ], isBossWave: false, isBossPrep: true },
 
       // Wave 40 — BOSS: The Statue / Face (BossManager handles it).
+      { groups: [], isBossWave: true, isBossPrep: false },
+
+      // ===== Decade 5 (waves 41-50): Healer / Support + Elite / Leader =====
+      // The strategic pivot: the new verb is the PRIORITY LADDER — kill the
+      // healer/buffer FIRST or the surrounding escort keeps shrugging off damage.
+      // D5 signature entry grammar: escorted double-wedges.
+
+      // Wave 41 — Air/recovery: re-presents D2-D4 archetypes at D1 complexity.
+      { groups: [
+        { type: 'wall', formation: 'random', count: 1, movementPattern: 'wall', shootPattern: 'none', delay: 0 },
+        { type: 'basic', formation: 'line', count: 5, movementPattern: 'swoop', shootPattern: 'none', delay: 400 },
+        { type: 'splinterer', formation: 'vshape', count: 1, movementPattern: 'straight', shootPattern: 'none', delay: 900 },
+        { type: 'homer', formation: 'random', count: 1, movementPattern: 'homing', shootPattern: 'none', delay: 1300 },
+        { type: 'advanced', formation: 'line', count: 3, movementPattern: 'straight', shootPattern: 'aimed', delay: 1600 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 42 — FIRST HEALER: a far, shielded medic that re-shields nearby
+      // enemies. Kill the medic first, or the whole squad ignores your bullets.
+      { groups: [
+        { type: 'healer', formation: 'random', count: 1, movementPattern: 'support', shootPattern: 'none', shieldHp: 2, delay: 0 },
+        { type: 'advanced', formation: 'pincer', count: 4, movementPattern: 'sinewave', shootPattern: 'aimed', delay: 400 },
+        { type: 'basic', formation: 'line', count: 6, movementPattern: 'swoop', shootPattern: 'none', delay: 900 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 43 — Healer + tank + rusher (ONE composition): priority ladder.
+      { groups: [
+        { type: 'healer', formation: 'random', count: 1, movementPattern: 'support', shootPattern: 'none', shieldHp: 2, delay: 0 },
+        { type: 'advanced', formation: 'line', count: 3, movementPattern: 'straight', shootPattern: 'aimed', hp: 3, delay: 500 },
+        { type: 'rusher', formation: 'random', count: 4, movementPattern: 'rusher', shootPattern: 'none', delay: 900 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 44 — Healer + splinterer: the healer restores the splintering parts,
+      // so kill it BEFORE engaging the splinters close-up.
+      { groups: [
+        { type: 'healer', formation: 'random', count: 1, movementPattern: 'support', shootPattern: 'none', shieldHp: 2, delay: 0 },
+        { type: 'splinterer', formation: 'vshape', count: 3, movementPattern: 'straight', shootPattern: 'none', aimShards: true, delay: 500 },
+        { type: 'basic', formation: 'line', count: 5, movementPattern: 'swoop', shootPattern: 'none', delay: 1100 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 45 — ELITE LEADER buffing neighbors (resistance): the "one to kill now."
+      { groups: [
+        { type: 'leader', formation: 'random', count: 1, movementPattern: 'support', shootPattern: 'spread3', delay: 0 },
+        { type: 'basic', formation: 'vshape', count: 5, movementPattern: 'straight', shootPattern: 'none', delay: 400 },
+        { type: 'advanced', formation: 'line', count: 4, movementPattern: 'straight', shootPattern: 'aimed', delay: 900 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 46 — Healer + elite together: healers re-shield elites. Two support
+      // priority contest — kill the healer, THEN the amplifying elite.
+      { groups: [
+        { type: 'healer', formation: 'random', count: 1, movementPattern: 'support', shootPattern: 'none', shieldHp: 2, delay: 0 },
+        { type: 'elite', formation: 'random', count: 1, movementPattern: 'hover', shootPattern: 'spread5', delay: 400 },
+        { type: 'basic', formation: 'line', count: 5, movementPattern: 'swoop', shootPattern: 'none', delay: 800 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 47 — Healer + homer + mirror + swarmer: priority under full noise.
+      { groups: [
+        { type: 'healer', formation: 'random', count: 1, movementPattern: 'support', shootPattern: 'none', shieldHp: 2, delay: 0 },
+        { type: 'homer', formation: 'random', count: 2, movementPattern: 'homing', shootPattern: 'none', delay: 300 },
+        { type: 'mirror', formation: 'random', count: 1, movementPattern: 'homing', shootPattern: 'none', delay: 700 },
+        { type: 'basic', formation: 'line', count: 7, movementPattern: 'swoop', shootPattern: 'none', delay: 1000 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 48 — TWO healers cross-healing each other + army: break the heal-loop.
+      { groups: [
+        { type: 'healer', formation: 'random', count: 2, movementPattern: 'support', shootPattern: 'none', shieldHp: 2, delay: 0 },
+        { type: 'advanced', formation: 'line', count: 4, movementPattern: 'straight', shootPattern: 'aimed', delay: 600 },
+        { type: 'rusher', formation: 'random', count: 4, movementPattern: 'rusher', shootPattern: 'none', delay: 1100 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 49 — Calm / pre-boss relief: breathing room, but an elite stalker teases.
+      { groups: [
+        { type: 'elite', formation: 'random', count: 1, movementPattern: 'dash', shootPattern: 'spread3', delay: 0 },
+        { type: 'basic', formation: 'line', count: 4, movementPattern: 'straight', shootPattern: 'none', delay: 500 },
+      ], isBossWave: false, isBossPrep: true },
+
+      // Wave 50 — BOSS: The Creature / Swimmer (BossManager handles it).
       { groups: [], isBossWave: true, isBossPrep: false },
     ];
 

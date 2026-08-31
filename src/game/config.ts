@@ -87,6 +87,8 @@ export const CONFIG = {
     ENEMY_HOMER: '#FFAA00',
     ENEMY_MIRROR: '#FF44AA',
     ENEMY_MIRRORCOPY: '#FF77CC',
+    ENEMY_HEALER: '#00FFCC',
+    ENEMY_LEADER: '#FFD700',
     ENEMY_SHIELD: '#2299FF',
     ENEMY_GLOW: 'rgba(255, 0, 68, 0.3)',
     BOSS: '#FF0066',
@@ -127,6 +129,7 @@ export const CONFIG = {
     BOSS_OMEGA: '#CC0000',
     BOSS_ABYSS: '#FFD700',
     BOSS_STATUE: '#CC88FF',
+    BOSS_CREATURE: '#00FF88',
   },
 
   FIXED_DT: 1 / 60,

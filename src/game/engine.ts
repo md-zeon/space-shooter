@@ -1245,6 +1245,25 @@ export class GameEngine {
           ctx.arc(cx, cy, 2, 0, Math.PI * 2);
           ctx.fill();
           break;
+
+        case 'escort':
+          // Elite fin-sail escort: a bright diamond that seals the creature's
+          // fin-core. Kill these first to open the creature for damage.
+          ctx.fillStyle = CONFIG.COLORS.BOSS_CREATURE;
+          ctx.shadowColor = CONFIG.COLORS.BOSS_CREATURE;
+          ctx.shadowBlur = 12;
+          ctx.beginPath();
+          ctx.moveTo(cx, m.y);
+          ctx.lineTo(m.x + m.width, cy);
+          ctx.lineTo(cx, m.y + m.height);
+          ctx.lineTo(m.x, cy);
+          ctx.closePath();
+          ctx.fill();
+          ctx.fillStyle = '#FFFFFF';
+          ctx.beginPath();
+          ctx.arc(cx, cy, 3, 0, Math.PI * 2);
+          ctx.fill();
+          break;
       }
 
       if (m.maxHealth > 1) {
@@ -1453,6 +1472,67 @@ export class GameEngine {
         ctx.shadowBlur = boss.phase >= 3 ? 16 : 0;
         ctx.beginPath();
         ctx.ellipse(cx, mouthY, boss.width * 0.3, boss.height * 0.12 * mouthOpen * 3 + 5, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        break;
+      }
+
+      case 'creature': {
+        // Neon-finned eel/ray cutting across the top band (the mobile boss).
+        // Long low body, undulating fins above and below, and a FIN-CORE that
+        // only lights when its elite escorts (the "buffer" fin-sails) are gone.
+        const waveX = Math.sin(boss.patternTimer * 0.0015);
+        const bodyH = boss.height * 0.4;
+        // Undulating fin (top).
+        ctx.beginPath();
+        ctx.moveTo(boss.x, cy);
+        for (let i = 0; i <= 12; i++) {
+          const t = i / 12;
+          const px = boss.x + boss.width * t;
+          const py = cy - bodyH * 0.6 + Math.sin(t * Math.PI * 2 + boss.patternTimer * 0.004) * 8;
+          if (i === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.lineTo(boss.x + boss.width, cy);
+        ctx.closePath();
+        ctx.fill();
+
+        // Undulating fin (bottom).
+        ctx.beginPath();
+        ctx.moveTo(boss.x, cy);
+        for (let i = 0; i <= 12; i++) {
+          const t = i / 12;
+          const px = boss.x + boss.width * t;
+          const py = cy + bodyH * 0.6 + Math.sin(t * Math.PI * 2 + boss.patternTimer * 0.004 + 0.5) * 8;
+          if (i === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.lineTo(boss.x + boss.width, cy);
+        ctx.closePath();
+        ctx.fill();
+
+        // Ray-like body.
+        ctx.beginPath();
+        ctx.ellipse(cx, cy, boss.width * 0.5, bodyH * 0.7, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Head / eye (front, toward the direction it sweeps).
+        const headX = cx + Math.sign(waveX) * boss.width * 0.4;
+        ctx.fillStyle = '#E8FFE8';
+        ctx.shadowColor = '#FFFFFF';
+        ctx.shadowBlur = 10;
+        ctx.beginPath();
+        ctx.arc(headX, cy, 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        // Fin-core: bright when exposed (escorts dead), dim when sealed.
+        const exposed = boss.coreOpen;
+        ctx.fillStyle = exposed ? '#FFFFFF' : '#556644';
+        ctx.shadowColor = exposed ? '#FFFFFF' : 'transparent';
+        ctx.shadowBlur = exposed ? 16 : 0;
+        ctx.beginPath();
+        ctx.arc(cx, cy, 9, 0, Math.PI * 2);
         ctx.fill();
         ctx.shadowBlur = 0;
         break;

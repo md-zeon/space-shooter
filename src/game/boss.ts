@@ -2,8 +2,8 @@ import { CONFIG } from './config';
 
 export type BossPhase = 1 | 2 | 3;
 export type BossAttackType = 'radial' | 'aimed_stream' | 'spiral' | 'fan' | 'laser' | 'ring' | 'composite' | 'shockwave' | 'soundwave' | 'crossfire';
-export type BossId = 'cipher' | 'spider' | 'turrets' | 'statue' | 'omega' | 'abyss';
-export type MinionType = 'basic' | 'shooter' | 'shield' | 'rusher' | 'mirror';
+export type BossId = 'cipher' | 'spider' | 'turrets' | 'statue' | 'creature' | 'omega' | 'abyss';
+export type MinionType = 'basic' | 'shooter' | 'shield' | 'rusher' | 'mirror' | 'escort';
 
 export interface BossBulletRequest {
   x: number;
@@ -100,6 +100,12 @@ const BOSS_DEFS: BossDef[] = [
     color: CONFIG.COLORS.BOSS_STATUE, baseHp: 240, speed: 0.6, targetY: 55,
     attacks: ['laser', 'aimed_stream', 'fan', 'ring', 'shockwave', 'soundwave', 'crossfire'],
     minionTypes: ['mirror'], minionCount: 2, minionInterval: 5000,
+  },
+  {
+    id: 'creature', name: 'CREATURE', width: 150, height: 60,
+    color: CONFIG.COLORS.BOSS_CREATURE, baseHp: 260, speed: 3.2, targetY: 50,
+    attacks: ['aimed_stream', 'fan', 'laser', 'shockwave', 'radial'],
+    minionTypes: ['escort'], minionCount: 2, minionInterval: 6000,
   },
   {
     id: 'omega', name: 'OMEGA', width: 110, height: 80,
@@ -231,6 +237,15 @@ export class BossManager {
       return;
     }
 
+    if (this.boss.bossId === 'creature') {
+      // The Creature's fin-cores stay sealed while its elite ESCORT is alive
+      // (the escorts "buff" the creature — Galaga Escort). Kill the escorts to
+      // open the fins; new escorts re-seal them mid-fight.
+      const escortAlive = this.boss.minions.some(m => m.active && m.type === 'escort');
+      this.boss.coreOpen = !escortAlive;
+      return;
+    }
+
     if (this.boss.bossId === 'spider') {
       if (this.boss.phase === 1) {
         // Phase A teaches "shoot the core": stays open.
@@ -290,6 +305,15 @@ export class BossManager {
           this.boss.targetX = canvasWidth / 2 - this.boss.width / 2 + (Math.random() - 0.5) * 60;
         }
         break;
+      case 'creature': {
+        // The mobile boss: a swimmer that SWEEPS the whole top band side to side.
+        // You must bait it AND keep its fin-core priority straight — the decade
+        // thesis of priority + baiting a moving target.
+        const sweepAmt = canvasWidth / 2 - this.boss.width / 2 - 14;
+        this.boss.x = canvasWidth / 2 - this.boss.width / 2 + Math.sin(this.boss.moveTimer * 0.0011) * sweepAmt;
+        this.boss.y = this.boss.targetY + Math.sin(this.boss.moveTimer * 0.0024) * 6;
+        return;
+      }
       case 'omega':
         if (this.boss.moveTimer > 5000) {
           this.boss.moveTimer = 0;
@@ -509,9 +533,16 @@ export class BossManager {
 
   private spawnMinion(type: MinionType) {
     if (!this.boss) return;
-    const health = type === 'shield' ? 3 : type === 'shooter' || type === 'rusher' ? 2 : type === 'mirror' ? 2 : 1;
-    const width = type === 'shield' ? 25 : 20;
-    const height = type === 'shield' ? 25 : 20;
+    const health = type === 'shield' || type === 'escort' ? 3 : type === 'shooter' || type === 'rusher' ? 2 : type === 'mirror' ? 2 : 1;
+    const width = type === 'shield' ? 25 : type === 'escort' ? 28 : 20;
+    const height = type === 'shield' ? 25 : type === 'escort' ? 28 : 20;
+
+    let orbitAngle = Math.random() * Math.PI * 2;
+    if (type === 'escort') {
+      // Elite escorts ride LEFT/RIGHT of the creature's fins (sealing the core).
+      const escortCount = this.boss.minions.filter(mm => mm.type === 'escort').length;
+      orbitAngle = escortCount % 2 === 0 ? -0.3 : 0.3;
+    }
 
     this.boss.minions.push({
       x: this.boss.x + Math.random() * (this.boss.width - width),
@@ -523,7 +554,7 @@ export class BossManager {
       type,
       active: true,
       patternTimer: Math.random() * 1000,
-      orbitAngle: Math.random() * Math.PI * 2,
+      orbitAngle,
     });
   }
 
@@ -585,6 +616,17 @@ export class BossManager {
           if (m.y > CONFIG.HEIGHT + 30) m.active = false;
           break;
         }
+
+        case 'escort': {
+          // Elite escort: rides the creature's fin, sealing the fin-core while
+          // alive. It mirrors the creature's sweep — destroy it to open the fins.
+          if (this.boss) {
+            const bcx = this.boss.x + this.boss.width / 2;
+            m.x = bcx + m.orbitAngle * this.boss.width - m.width / 2;
+            m.y = this.boss.y + this.boss.height * 0.6;
+          }
+          break;
+        }
       }
     }
   }
@@ -593,6 +635,7 @@ export class BossManager {
     if (!this.boss || !this.boss.active || this.boss.invulnerable || this.boss.dying || this.boss.entering) return false;
     if (this.boss.bossId === 'spider' && !this.boss.coreOpen) return false;
     if (this.boss.bossId === 'turrets' && !this.boss.coreOpen) return false;
+    if (this.boss.bossId === 'creature' && !this.boss.coreOpen) return false;
 
     this.boss.health -= amount;
     this.boss.flashTimer = 100;
