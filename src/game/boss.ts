@@ -2,8 +2,8 @@ import { CONFIG } from './config';
 
 export type BossPhase = 1 | 2 | 3;
 export type BossAttackType = 'radial' | 'aimed_stream' | 'spiral' | 'fan' | 'laser' | 'ring' | 'composite' | 'shockwave' | 'soundwave' | 'crossfire' | 'snipe' | 'charge';
-export type BossId = 'cipher' | 'spider' | 'turrets' | 'statue' | 'creature' | 'shell' | 'fortress' | 'mech' | 'omega' | 'abyss';
-export type MinionType = 'basic' | 'shooter' | 'shield' | 'rusher' | 'mirror' | 'escort' | 'aimer' | 'mine' | 'gturret' | 'slot' | 'drone';
+export type BossId = 'cipher' | 'spider' | 'turrets' | 'statue' | 'creature' | 'shell' | 'fortress' | 'mech' | 'carrier' | 'omega' | 'abyss';
+export type MinionType = 'basic' | 'shooter' | 'shield' | 'rusher' | 'mirror' | 'escort' | 'aimer' | 'mine' | 'gturret' | 'slot' | 'drone' | 'fleet';
 
 export interface BossBulletRequest {
   x: number;
@@ -128,6 +128,12 @@ const BOSS_DEFS: BossDef[] = [
     color: CONFIG.COLORS.BOSS_MECH, baseHp: 310, speed: 0.5, targetY: 95,
     attacks: ['aimed_stream', 'fan', 'laser', 'ring'],
     minionTypes: ['drone'], minionCount: 1, minionInterval: 3000,
+  },
+  {
+    id: 'carrier', name: 'ESCORT-CARRIER', width: 128, height: 92,
+    color: CONFIG.COLORS.BOSS_CARRIER, baseHp: 330, speed: 0.25, targetY: 85,
+    attacks: ['fan', 'aimed_stream', 'ring', 'laser', 'soundwave'],
+    minionTypes: ['fleet'], minionCount: 2, minionInterval: 3200,
   },
   {
     id: 'omega', name: 'OMEGA', width: 110, height: 80,
@@ -357,6 +363,23 @@ export class BossManager {
       return;
     }
 
+    if (this.boss.bossId === 'carrier') {
+      // The Escort-Carrier's hull core is only hittable in WINDOWS while it keeps
+      // spawning its fleet (the "minions ARE the attack" structure). Surviving
+      // fleet mini-ships SCREEN the core — each one lengthens the closed window,
+      // so clearing lanes shrinks it (lane-clearing -> slow-window DPS).
+      // Phase 1 teaches a short window; phase C's window opens much longer.
+      const fleets = this.boss.minions.filter(m => m.active && m.type === 'fleet').length;
+      const closedDuration = 1300 + fleets * 550;
+      const openDuration = this.boss.phase >= 3 ? 2600 : this.boss.phase === 2 ? 1500 : 1000;
+      this.boss.coreCycleTimer += deltaTime * 1000;
+      const cycle = closedDuration + openDuration;
+      const t = this.boss.coreCycleTimer % cycle;
+      this.boss.coreOpen = t >= closedDuration;
+      if (this.boss.phaseTransitioning) this.boss.coreOpen = true;
+      return;
+    }
+
     // All other bosses: always damageable (core stays exposed).
     this.boss.coreOpen = true;
   }
@@ -447,6 +470,16 @@ export class BossManager {
         this.boss.y = this.boss.targetY + Math.sin(this.boss.moveTimer * 0.003) * 6;
         return;
       }
+      case 'carrier':
+        // The factory: hull creeps side to side while the boat "anchors" —
+        // it only repositions so its fleet docks differently. The core windows
+        // and the fleet are the fight.
+        if (this.boss.moveTimer > 5200) {
+          this.boss.moveTimer = 0;
+          this.boss.targetX = canvasWidth / 2 - this.boss.width / 2 + (Math.random() - 0.5) * 160;
+        }
+        this.boss.y = this.boss.targetY + Math.sin(this.boss.moveTimer * 0.0012) * 4;
+        break;
       case 'omega':
         if (this.boss.moveTimer > 5000) {
           this.boss.moveTimer = 0;
@@ -694,9 +727,9 @@ export class BossManager {
 
   private spawnMinion(type: MinionType) {
     if (!this.boss) return;
-    const health = type === 'shield' || type === 'escort' ? 3 : type === 'shooter' || type === 'rusher' || type === 'gturret' ? 2 : type === 'mirror' ? 2 : type === 'drone' ? 2 : type === 'slot' ? 2 : type === 'mine' ? 1 : type === 'aimer' ? 1 : 1;
-    const width = type === 'shield' ? 25 : type === 'escort' ? 28 : type === 'mine' ? 14 : type === 'aimer' ? 22 : type === 'slot' ? 18 : type === 'gturret' ? 24 : type === 'drone' ? 24 : 20;
-    const height = type === 'shield' ? 25 : type === 'escort' ? 28 : type === 'mine' ? 14 : type === 'aimer' ? 22 : type === 'slot' ? 24 : type === 'gturret' ? 24 : type === 'drone' ? 20 : 20;
+    const health = type === 'shield' || type === 'escort' ? 3 : type === 'shooter' || type === 'rusher' || type === 'gturret' ? 2 : type === 'mirror' ? 2 : type === 'drone' ? 2 : type === 'slot' ? 2 : type === 'fleet' ? 2 : type === 'mine' ? 1 : type === 'aimer' ? 1 : 1;
+    const width = type === 'shield' ? 25 : type === 'escort' ? 28 : type === 'mine' ? 14 : type === 'aimer' ? 22 : type === 'slot' ? 18 : type === 'gturret' ? 24 : type === 'drone' ? 24 : type === 'fleet' ? 22 : 20;
+    const height = type === 'shield' ? 25 : type === 'escort' ? 28 : type === 'mine' ? 14 : type === 'aimer' ? 22 : type === 'slot' ? 24 : type === 'gturret' ? 24 : type === 'drone' ? 20 : type === 'fleet' ? 20 : 20;
 
     let orbitAngle = Math.random() * Math.PI * 2;
     if (type === 'escort') {
@@ -715,9 +748,20 @@ export class BossManager {
       orbitAngle = (slotCount % 4) / 4;
     }
 
+    let spawnX = this.boss.x + Math.random() * (this.boss.width - width);
+    let spawnY = this.boss.y + this.boss.height;
+    if (type === 'fleet') {
+      // The bay drops the fleet in across the carrier's underside — a visible
+      // file-in from visible bay doors (never random). Alternate lanes read as
+      // "the bays are loading THIS column now."
+      const fleetCount = this.boss.minions.filter(mm => mm.type === 'fleet').length;
+      spawnX = this.boss.x + (fleetCount % 2 === 0 ? 0.22 : 0.72) * (this.boss.width - width);
+      spawnY = this.boss.y + this.boss.height * 0.7;
+    }
+
     this.boss.minions.push({
-      x: this.boss.x + Math.random() * (this.boss.width - width),
-      y: this.boss.y + this.boss.height,
+      x: spawnX,
+      y: spawnY,
       width,
       height,
       health,
@@ -882,6 +926,18 @@ export class BossManager {
           }
           break;
         }
+
+        case 'fleet': {
+          // Carrier's escort-fleet: spawned one wave-type at a time from the
+          // loading bay. They SCREEN the carrier's core (each survivor lengthens
+          // the closed window) and fire a light shot as they descend. Clear lanes
+          // to re-open the hull. They file in slowly from the bay - Galaga break-
+          // away template - never random.
+          m.y += 1.4 * dt60;
+          m.x = Math.max(0, Math.min(canvasWidth - m.width, m.x + Math.sin(m.patternTimer * 0.003) * 0.6));
+          if (m.y > CONFIG.HEIGHT + 30) m.active = false;
+          break;
+        }
       }
     }
 
@@ -895,6 +951,7 @@ export class BossManager {
     if (this.boss.bossId === 'creature' && !this.boss.coreOpen) return false;
     if (this.boss.bossId === 'shell' && !this.boss.coreOpen) return false;
     if (this.boss.bossId === 'fortress' && !this.boss.coreOpen) return false;
+    if (this.boss.bossId === 'carrier' && !this.boss.coreOpen) return false;
 
     this.boss.health -= amount;
     this.boss.flashTimer = 100;

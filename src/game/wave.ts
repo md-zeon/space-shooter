@@ -229,6 +229,7 @@ function getMovementPattern(formation: FormationType, type: EnemyType): string {
   if (type === 'teleporter') return 'teleporter';
   if (type === 'attractor') return 'attractor';
   if (type === 'terrain') return 'terrain';
+  if (type === 'turret') return 'turret';
   switch (formation) {
     case 'line': return 'straight';
     case 'vshape': return 'straight';
@@ -247,6 +248,7 @@ function getShootPattern(type: EnemyType, difficulty: number): string {
   if (type === 'teleporter') return 'none';
   if (type === 'attractor') return 'none';
   if (type === 'terrain') return 'none';
+  if (type === 'turret') return 'turret_aimed';
   if (type === 'healer') return 'none';
   if (type === 'leader') return difficulty >= 6 ? 'aimed' : 'spread3';
   if (difficulty <= 2) {
@@ -891,6 +893,87 @@ export class WaveManager {
       ], isBossWave: false, isBossPrep: true },
 
       // Wave 80 — BOSS: The Nimble Rocket-Skater Mech (BossManager handles it).
+      { groups: [], isBossWave: true, isBossPrep: false },
+
+      // ===== Decade 9 (waves 81-90): Turret / Static Kill-Zones =====
+      // The new verb is POSITIONAL AWARENESS OF STATIC KILL-ZONES — "don't
+      // breathe in the cone." Turrets charge-telegraph their beam and hold fixed
+      // zones; you read the charge and time your pass, not dodge-the-fire.
+      // D9 signature entry grammar: turret-anchored entrances (enemies enter
+      // WHILE turrets already hold zones).
+
+      // Wave 81 — Air/recovery: terrain + all prior archetypes lightly, NO turret
+      // (the post-boss air-wave stays clean of the new verb).
+      { groups: [
+        { type: 'terrain', formation: 'random', count: 1, movementPattern: 'terrain', shootPattern: 'none', delay: 0 },
+        { type: 'basic', formation: 'line', count: 5, movementPattern: 'swoop', shootPattern: 'none', delay: 600 },
+        { type: 'homer', formation: 'random', count: 1, movementPattern: 'homing', shootPattern: 'none', delay: 1000 },
+        { type: 'advanced', formation: 'line', count: 3, movementPattern: 'straight', shootPattern: 'aimed', delay: 1400 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 82 — FIRST TURRET: a static AA emplacement. Its beam aims at your
+      // column AFTER a charging ring — the lesson is dodge-on-telegraph, not on-fire.
+      { groups: [
+        { type: 'turret', formation: 'random', count: 1, movementPattern: 'turret', shootPattern: 'turret_aimed', delay: 0 },
+        { type: 'basic', formation: 'line', count: 5, movementPattern: 'swoop', shootPattern: 'none', delay: 600 },
+        { type: 'advanced', formation: 'pincer', count: 2, movementPattern: 'ambush', shootPattern: 'aimed', bottomEntry: true, delay: 1100 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 83 — TURRET FAMILIES: AA (aimed) + Laser (vertical beam) + Plasma
+      // (wide spread). Distinguish the tells — read the cone, don't count shots.
+      { groups: [
+        { type: 'turret', formation: 'random', count: 1, movementPattern: 'turret', shootPattern: 'turret_aimed', delay: 0 },
+        { type: 'turret', formation: 'random', count: 1, movementPattern: 'turret', shootPattern: 'turret_laser', delay: 500 },
+        { type: 'turret', formation: 'random', count: 1, movementPattern: 'turret', shootPattern: 'turret_plasma', delay: 1000 },
+        { type: 'basic', formation: 'vshape', count: 4, movementPattern: 'swoop', shootPattern: 'none', delay: 1500 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 84 — Turrets ANCHORING a swarm: static threats hold the zone while
+      // moving threats pour around them. Placement duet — static + moving.
+      { groups: [
+        { type: 'turret', formation: 'random', count: 2, movementPattern: 'turret', shootPattern: 'turret_aimed', delay: 0 },
+        { type: 'basic', formation: 'line', count: 6, movementPattern: 'swoop', shootPattern: 'none', delay: 600 },
+        { type: 'rusher', formation: 'pincer', count: 4, movementPattern: 'rusher', shootPattern: 'none', delay: 1200 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 85 — Turret + terrain: a turret behind cover you must FLANK. The
+      // crate eats your straight shots, so route around to break the kill-zone.
+      { groups: [
+        { type: 'terrain', formation: 'random', count: 1, movementPattern: 'terrain', shootPattern: 'none', delay: 0 },
+        { type: 'turret', formation: 'random', count: 1, movementPattern: 'turret', shootPattern: 'turret_laser', delay: 400 },
+        { type: 'basic', formation: 'line', count: 5, movementPattern: 'straight', shootPattern: 'aimed', delay: 900 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 86 — Turret + gravity: the attractor's pull drifts you INTO the
+      // turret's cone. Budget your drift around the kill-zone.
+      { groups: [
+        { type: 'turret', formation: 'random', count: 1, movementPattern: 'turret', shootPattern: 'turret_plasma', delay: 0 },
+        { type: 'attractor', formation: 'random', count: 1, movementPattern: 'attractor', shootPattern: 'none', delay: 400 },
+        { type: 'basic', formation: 'line', count: 5, movementPattern: 'swoop', shootPattern: 'none', delay: 900 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 87 — Turret + teleporter + homer: three verbs, turret is the anchor.
+      { groups: [
+        { type: 'turret', formation: 'random', count: 1, movementPattern: 'turret', shootPattern: 'turret_aimed', delay: 0 },
+        { type: 'teleporter', formation: 'random', count: 2, movementPattern: 'teleporter', shootPattern: 'none', delay: 500 },
+        { type: 'homer', formation: 'random', count: 2, movementPattern: 'homing', shootPattern: 'none', delay: 1000 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 88 — ELITE TURRET FORTRESS: a TWO-STAGE emplacement (multi-barrel,
+      // armored) — strip the shield, THEN dismantle the multi-barrel beat.
+      { groups: [
+        { type: 'turret', formation: 'random', count: 1, movementPattern: 'turret', shootPattern: 'turret_plasma', hp: 4, shieldHp: 2, delay: 0 },
+        { type: 'turret', formation: 'random', count: 1, movementPattern: 'turret', shootPattern: 'turret_laser', delay: 600 },
+        { type: 'advanced', formation: 'line', count: 4, movementPattern: 'straight', shootPattern: 'aimed', delay: 1200 },
+      ], isBossWave: false, isBossPrep: false },
+
+      // Wave 89 — Calm / pre-boss relief: sparse turret, breathing room.
+      { groups: [
+        { type: 'turret', formation: 'random', count: 1, movementPattern: 'turret', shootPattern: 'turret_aimed', delay: 0 },
+        { type: 'basic', formation: 'line', count: 4, movementPattern: 'straight', shootPattern: 'none', delay: 600 },
+      ], isBossWave: false, isBossPrep: true },
+
+      // Wave 90 — BOSS: The Escort-Carrier (BossManager handles it).
       { groups: [], isBossWave: true, isBossPrep: false },
     ];
 

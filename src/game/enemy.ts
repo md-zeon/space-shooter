@@ -1,6 +1,6 @@
 import { CONFIG } from './config';
 
-export type EnemyType = 'basic' | 'advanced' | 'elite' | 'wall' | 'splinterer' | 'rusher' | 'homer' | 'mirror' | 'mirrorcopy' | 'healer' | 'leader' | 'teleporter' | 'attractor' | 'terrain';
+export type EnemyType = 'basic' | 'advanced' | 'elite' | 'wall' | 'splinterer' | 'rusher' | 'homer' | 'mirror' | 'mirrorcopy' | 'healer' | 'leader' | 'teleporter' | 'attractor' | 'terrain' | 'turret';
 
 export interface Enemy {
   x: number;
@@ -33,6 +33,8 @@ export interface Enemy {
   indestructible: boolean;
   explosive: boolean;
   lifespan: number;
+  charging: boolean;
+  chargeTimer: number;
 }
 
 /** A tile of an enemy that must be stripped (shield/armor) before core damage. */
@@ -93,7 +95,8 @@ export class EnemyManager {
     const isHomer = type === 'homer';
     const isAttractor = type === 'attractor';
     const isTerrain = type === 'terrain';
-    const health = hp ?? (isWall ? 3 : type === 'elite' ? 4 : type === 'leader' ? 4 : type === 'advanced' ? 2 : type === 'mirror' ? 2 : type === 'healer' ? 1 : isSplinterer ? 1 : isAttractor ? 3 : isTerrain ? 3 : 1);
+    const isTurret = type === 'turret';
+    const health = hp ?? (isWall ? 3 : type === 'elite' ? 4 : type === 'leader' ? 4 : type === 'advanced' ? 2 : type === 'mirror' ? 2 : type === 'healer' ? 1 : isSplinterer ? 1 : isAttractor ? 3 : isTerrain ? 3 : isTurret ? 2 : 1);
     this.enemies.push({
       x, y,
       width: isWall ? 30 : isAttractor ? 40 : isTerrain ? 38 : type === 'elite' ? 35 : type === 'leader' ? 35 : isRusher ? 26 : isHomer ? 26 : CONFIG.ENEMY_WIDTH,
@@ -124,6 +127,8 @@ export class EnemyManager {
       indestructible,
       explosive,
       lifespan: indestructible ? 9000 : -1,
+      charging: false,
+      chargeTimer: 0,
     });
 
     if (formationId >= 0 && !this.formationOrigins.has(formationId)) {
@@ -509,6 +514,52 @@ export class EnemyManager {
             break;
           }
 
+          case 'turret': {
+            // D9 static emplacement: descends into a park, then HOLDS a kill-zone.
+            // Its fire cycle CHARGE-TELEGRAPHS: a growing glint ring reads "dodge
+            // NOW / time the pass" BEFORE the beam lands. Positional awareness —
+            // don't breathe in the cone while it charges.
+            const parkY = 20 + (Math.min(enemy.originX, CONFIG.WIDTH - enemy.width) / CONFIG.WIDTH) * 150;
+            if (enemy.y < parkY) {
+              enemy.y += speed * 0.4;
+            } else {
+              const interval = 2600;
+              const chargeMs = 650;
+              const cycle = interval + chargeMs;
+              const t = enemy.patternTimer % cycle;
+              const cx = enemy.x + enemy.width / 2;
+              const cy = enemy.y + enemy.height;
+              if (t < chargeMs) {
+                enemy.charging = true;
+                enemy.chargeTimer = chargeMs - t;
+              } else if (t - deltaTime * 1000 < chargeMs) {
+                // Telegraph complete — the beam fires.
+                enemy.charging = false;
+                enemy.shootTimer = 0;
+                switch (enemy.shootPattern) {
+                  case 'turret_laser':
+                    // Laser turret: a thick fast vertical beam down its column.
+                    bulletRequests.push({ x: cx, y: cy, angle: Math.PI / 2, speed: 8.5, type: 'laser' });
+                    break;
+                  case 'turret_plasma':
+                    // Plasma turret: a short-trigger 3-way spread.
+                    for (let s = -1; s <= 1; s++) {
+                      bulletRequests.push({ x: cx, y: cy, angle: Math.PI / 2 + s * 0.24, speed: 4.2, type: 'spread' });
+                    }
+                    break;
+                  default:
+                    // AA turret: an aimed beam at the player's current column.
+                    {
+                      const angle = Math.atan2(this.playerY - cy, this.playerX - cx);
+                      bulletRequests.push({ x: cx, y: cy, angle, speed: 6.5, type: 'laser' });
+                    }
+                    break;
+                }
+              }
+            }
+            break;
+          }
+
           default:
             enemy.y += speed;
         }
@@ -739,6 +790,8 @@ export class EnemyManager {
         indestructible: false,
         explosive: false,
         lifespan: -1,
+        charging: false,
+        chargeTimer: 0,
       };
       this.enemies.push(copy);
     }
@@ -827,6 +880,10 @@ export class EnemyManager {
             color = CONFIG.COLORS.ENEMY_TERRAIN;
           }
           shape = 'terrain';
+          break;
+        case 'turret':
+          color = CONFIG.COLORS.ENEMY_TURRET;
+          shape = 'turret';
           break;
       }
 
@@ -941,6 +998,46 @@ export class EnemyManager {
             ctx.lineTo(enemy.x + enemy.width - 2, sy);
             ctx.stroke();
           }
+        }
+      } else if (shape === 'turret') {
+        // Static emplacement: a squat gun base + barrel. While CHARGING it draws
+        // a growing glint ring — the "don't breathe in the cone" telegraph — and
+        // the barrel flash reads the exact moment of fire.
+        ctx.fillStyle = color;
+        ctx.globalAlpha = 0.9;
+        ctx.fillRect(enemy.x + 4, enemy.y + enemy.height * 0.55, enemy.width - 8, enemy.height * 0.35);
+        ctx.globalAlpha = 1;
+
+        // Barrel: points down the firing column.
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(centerX, enemy.y + enemy.height * 0.1);
+        ctx.lineTo(centerX, enemy.y + enemy.height * 0.6);
+        ctx.stroke();
+        ctx.lineWidth = 1;
+
+        // Housing flare.
+        ctx.fillRect(enemy.x + 6, enemy.y + enemy.height * 0.55, enemy.width - 12, 6);
+
+        if (enemy.charging) {
+          const progress = 1 - enemy.chargeTimer / 650;
+          ctx.strokeStyle = CONFIG.COLORS.ENEMY_TURRET_CHARGE;
+          ctx.shadowColor = CONFIG.COLORS.ENEMY_TURRET_CHARGE;
+          ctx.shadowBlur = 10;
+          ctx.globalAlpha = 0.4 + progress * 0.6;
+          ctx.beginPath();
+          ctx.arc(centerX, centerY, enemy.width * (0.4 + progress * 0.9), 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+        } else {
+          ctx.fillStyle = CONFIG.COLORS.ENEMY_TURRET_CHARGE;
+          ctx.shadowColor = CONFIG.COLORS.ENEMY_TURRET_CHARGE;
+          ctx.shadowBlur = 10;
+          ctx.beginPath();
+          ctx.arc(centerX, enemy.y + enemy.height * 0.62, 3, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.shadowBlur = 0;
         }
       } else if (shape === 'splinterer') {
         // Spiky star/orb: fragile, ready to shatter and spray shards outward.

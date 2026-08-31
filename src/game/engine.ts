@@ -1235,6 +1235,35 @@ export class GameEngine {
       const cy = m.y + m.height / 2;
 
       switch (m.type) {
+        case 'fleet':
+          // Carrier escort-fleet: a small winged interceptor that files in from
+          // the bay and SCREENS the carrier core. Reads as "the minions ARE the
+          // attack" — a bright intercept ship, not a weak-point or a shooter.
+          ctx.fillStyle = CONFIG.COLORS.BOSS_CARRIER;
+          ctx.shadowColor = CONFIG.COLORS.BOSS_CARRIER;
+          ctx.shadowBlur = 10;
+          ctx.beginPath();
+          ctx.moveTo(cx, m.y);
+          ctx.lineTo(m.x + m.width, m.y + m.height * 0.5);
+          ctx.lineTo(cx, m.y + m.height);
+          ctx.lineTo(m.x, m.y + m.height * 0.5);
+          ctx.closePath();
+          ctx.fill();
+          ctx.fillStyle = '#FFFFFF';
+          ctx.beginPath();
+          ctx.arc(cx, m.y + m.height * 0.5, 2, 0, Math.PI * 2);
+          ctx.fill();
+          // Wing tips that flutter.
+          ctx.strokeStyle = CONFIG.COLORS.BOSS_CARRIER_BAY;
+          ctx.lineWidth = 1.5;
+          ctx.beginPath();
+          ctx.moveTo(m.x + 2, m.y + m.height * 0.35);
+          ctx.lineTo(m.x - 5, m.y + m.height * 0.5);
+          ctx.moveTo(m.x + m.width - 2, m.y + m.height * 0.35);
+          ctx.lineTo(m.x + m.width + 5, m.y + m.height * 0.5);
+          ctx.stroke();
+          break;
+
         case 'basic':
           ctx.fillStyle = boss.color;
           ctx.shadowColor = boss.color;
@@ -1947,13 +1976,66 @@ export class GameEngine {
         }
         break;
       }
+
+      case 'carrier': {
+        // The Escort-Carrier: a beached-hull aircraft "factory" — broad flat
+        // deck, engine pods, and the LOADING BAY across its underside where its
+        // fleet files in. Its bright CORE slips open in WINDOWS (only hittable
+        // then), so the fight reads: the bay keeps spawning minions that screen
+        // the core, and you clear lanes to land damage in the open window.
+        ctx.fillStyle = boss.color;
+        ctx.shadowColor = boss.color;
+        ctx.shadowBlur = 18;
+
+        // Hull deck: a wide rounded slab.
+        ctx.fillRect(boss.x, boss.y + boss.height * 0.3, boss.width, boss.height * 0.5);
+
+        // Engine pods (port/starboard) — the "anchors".
+        ctx.fillRect(boss.x + 4, boss.y + boss.height * 0.12, boss.width * 0.16, boss.height * 0.6);
+        ctx.fillRect(boss.x + boss.width * 0.8, boss.y + boss.height * 0.12, boss.width * 0.16, boss.height * 0.6);
+
+        // Loading bay line across the underside: even when shut it reads as the
+        // seam where minions exit.
+        ctx.fillStyle = CONFIG.COLORS.BOSS_CARRIER_BAY;
+        ctx.shadowColor = CONFIG.COLORS.BOSS_CARRIER_BAY;
+        ctx.shadowBlur = 6;
+        ctx.fillRect(boss.x + boss.width * 0.16, boss.y + boss.height * 0.78, boss.width * 0.68, 3);
+
+        // The CORE/WEAK POINT: a bright reactor inside the hull — only drawn when
+        // the window is OPEN so the player reads exactly when to commit damage.
+        if (boss.coreOpen) {
+          const pulse = (boss.phaseTransitioning ? 1 : 0.6 + Math.sin(performance.now() * 0.02) * 0.4);
+          const coreColor = boss.phase >= 3 ? '#FFFFFF' : CONFIG.COLORS.BOSS_CARRIER_CORE;
+          ctx.fillStyle = coreColor;
+          ctx.shadowColor = coreColor;
+          ctx.shadowBlur = 26;
+          ctx.globalAlpha = pulse;
+          ctx.beginPath();
+          ctx.arc(cx, boss.y + boss.height * 0.55, 12, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.globalAlpha = 1;
+          ctx.fillStyle = '#FFFFFF';
+          ctx.beginPath();
+          ctx.arc(cx, boss.y + boss.height * 0.55, 4, 0, Math.PI * 2);
+          ctx.fill();
+          // A glint ring marks the open window's edge.
+          ctx.strokeStyle = CONFIG.COLORS.BOSS_CARRIER_BAY;
+          ctx.lineWidth = 1.5;
+          ctx.globalAlpha = 0.6;
+          ctx.beginPath();
+          ctx.arc(cx, boss.y + boss.height * 0.55, 17, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.globalAlpha = 1;
+        }
+        break;
+      }
     }
 
     const eyeY = boss.y + boss.height * 0.35;
     ctx.fillStyle = boss.phase === 3 ? '#FF00FF' : boss.phase === 2 ? '#FF6600' : '#FFFFFF';
     ctx.shadowColor = ctx.fillStyle;
     ctx.shadowBlur = 12;
-    if (boss.bossId !== 'spider' && boss.bossId !== 'turrets' && boss.bossId !== 'statue' && boss.bossId !== 'shell' && boss.bossId !== 'fortress' && boss.bossId !== 'mech') {
+    if (boss.bossId !== 'spider' && boss.bossId !== 'turrets' && boss.bossId !== 'statue' && boss.bossId !== 'shell' && boss.bossId !== 'fortress' && boss.bossId !== 'mech' && boss.bossId !== 'carrier') {
       ctx.beginPath();
       ctx.arc(cx, eyeY, boss.width * 0.08, 0, Math.PI * 2);
       ctx.fill();
