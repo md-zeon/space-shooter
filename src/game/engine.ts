@@ -4,7 +4,7 @@ import { Player, createPlayer, updatePlayer, renderPlayer } from './player';
 import { BulletPool, Bullet } from './bullet';
 import { EnemyManager } from './enemy';
 import { ParticleSystem } from './particles';
-import { PowerUpManager } from './powerup';
+import { PowerUpManager, PowerUp } from './powerup';
 import { AudioManager } from './audio';
 import { Renderer } from './renderer';
 import { checkCollision, getPlayerHitbox } from './collision';
@@ -281,9 +281,13 @@ export class GameEngine {
     if (this.boss.isBossActive() || this.warningActive || this.bossDefeatTimer > 0) return;
 
     const spawnCapCount = this.enemies.countForSpawnCap();
-    // Arena budget grows with difficulty so higher waves can field more enemies
-    // at once without the hard cap truncating a wave mid-spawn.
-    const spawnCap = CONFIG.MAX_ONSCREEN_ENEMIES + this.waves.getDifficulty() * 8;
+    // Arena budget grows modestly with difficulty so higher waves can field more
+    // enemies at once without the hard cap truncating a wave mid-spawn. The
+    // growth is bounded — the old `+ difficulty*8` ballooned to a 500+ enemy cap
+    // at wave 200, which both dumped whole waves at once (destroying pacing) and
+    // threatened low-end mobile GPUs.
+    const difficulty = this.waves.getDifficulty();
+    const spawnCap = CONFIG.MAX_ONSCREEN_ENEMIES + Math.min(difficulty * 3, 45);
     if (spawnCapCount >= spawnCap) return;
 
     // The live-enemy census gates wave completion (next wave only after every
@@ -837,7 +841,7 @@ export class GameEngine {
 
     // Power-ups vs player — collect removals to avoid mutating array during iteration
     const powerUps = this.powerUps.getActive();
-    const toRemove: { type: string }[] = [];
+    const toRemove: PowerUp[] = [];
     for (const powerUp of powerUps) {
       if (!powerUp.active) continue;
 
@@ -850,7 +854,7 @@ export class GameEngine {
       }
     }
     for (const p of toRemove) {
-      this.powerUps.remove(p as any);
+      this.powerUps.remove(p);
     }
   }
 

@@ -743,8 +743,12 @@ export class EnemyManager {
     const cy = enemy.y + enemy.height;
 
     switch (enemy.shootPattern) {
+      // Fire cadence is driven by wave difficulty and must KEEP climbing across
+      // the whole run (waves 1-200). A fixed floor stops escalation ~wave 40, so
+      // every pattern now scales toward a late-game floor (reached ~diff 45-50)
+      // instead of flat-lining early — later waves consistently densify fire.
       case 'straight': {
-        const interval = Math.max(1000, 3500 - this.difficulty * 170);
+        const interval = Math.max(500, 3200 - this.difficulty * 55);
         if (enemy.shootTimer >= interval) {
           enemy.shootTimer = 0;
           requests.push({ x: cx, y: cy, angle: Math.PI / 2, type: 'straight' });
@@ -753,7 +757,7 @@ export class EnemyManager {
       }
 
       case 'aimed': {
-        const interval = Math.max(1000, 2500 - this.difficulty * 110);
+        const interval = Math.max(450, 2600 - this.difficulty * 42);
         if (enemy.shootTimer >= interval) {
           enemy.shootTimer = 0;
           const angle = Math.atan2(this.playerY - cy, this.playerX - cx);
@@ -763,7 +767,7 @@ export class EnemyManager {
       }
 
       case 'spread3': {
-        const interval = Math.max(850, 2200 - this.difficulty * 110);
+        const interval = Math.max(380, 2300 - this.difficulty * 38);
         if (enemy.shootTimer >= interval) {
           enemy.shootTimer = 0;
           for (let i = -1; i <= 1; i++) {
@@ -774,7 +778,7 @@ export class EnemyManager {
       }
 
       case 'spread5': {
-        const interval = Math.max(1000, 2500 - this.difficulty * 110);
+        const interval = Math.max(420, 2600 - this.difficulty * 42);
         if (enemy.shootTimer >= interval) {
           enemy.shootTimer = 0;
           for (let i = -2; i <= 2; i++) {
@@ -785,10 +789,10 @@ export class EnemyManager {
       }
 
       case 'radial': {
-        const interval = Math.max(1600, 4000 - this.difficulty * 160);
+        const interval = Math.max(650, 4200 - this.difficulty * 70);
         if (enemy.shootTimer >= interval) {
           enemy.shootTimer = 0;
-          const count = 8 + this.difficulty;
+          const count = 8 + Math.min(this.difficulty, 24);
           for (let i = 0; i < count; i++) {
             const angle = (i / count) * Math.PI * 2;
             requests.push({ x: cx, y: cy, angle, type: 'radial' });
@@ -798,7 +802,7 @@ export class EnemyManager {
       }
 
       case 'spiral': {
-        const interval = Math.max(80, 120 - this.difficulty * 5);
+        const interval = Math.max(60, 110 - this.difficulty * 1.6);
         if (enemy.shootTimer >= interval) {
           enemy.shootTimer = 0;
           const angle = enemy.patternTimer * 0.005;
@@ -809,7 +813,7 @@ export class EnemyManager {
       }
 
       case 'burst3': {
-        const interval = Math.max(1200, 3000 - this.difficulty * 110);
+        const interval = Math.max(550, 3200 - this.difficulty * 52);
         if (enemy.shootTimer >= interval) {
           enemy.shootTimer = 0;
           const baseAngle = Math.atan2(this.playerY - cy, this.playerX - cx);
@@ -824,9 +828,12 @@ export class EnemyManager {
 
     // Late-wave escalation: enemy bullets travel faster as difficulty climbs so
     // the game keeps getting harder instead of flat-lining at early-wave speed.
-    const speedScale = 1 + Math.min(0.8, Math.max(0, this.difficulty - 1) * 0.022);
+    // The cap now favors survival over flat-lining — it stays low enough to be
+    // dodgeable (the touch field is 400px wide) but keeps rising well past the
+    // old +80% ceiling that was reached around wave 38.
+    const speedScale = 1 + Math.min(1.4, Math.max(0, this.difficulty - 1) * 0.016);
     for (const r of requests) {
-      r.speed = Math.min(CONFIG.ENEMY_BULLET_SPEED * speedScale, 6.8);
+      r.speed = Math.min(CONFIG.ENEMY_BULLET_SPEED * speedScale, 9.5);
     }
 
     return requests.length > 0 ? requests : null;

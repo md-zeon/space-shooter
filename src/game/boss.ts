@@ -538,7 +538,11 @@ export class BossManager {
 
     if (this.boss.attackTimer >= this.boss.attackCooldown && !this.boss.currentAttack) {
       this.boss.currentAttack = this.pickAttack(def);
-      this.boss.attackDuration = 2000 + Math.random() * 1500;
+      // Boss pressure scales with wave difficulty so later bosses aren't just
+      // HP sponges — they attack faster and string longer volleys (density is
+      // added at the bullet level below). Saturates rather than ever flat-lining.
+      const extra = Math.min(this.difficulty * 25, 1250);
+      this.boss.attackDuration = 2000 + Math.random() * 1500 + extra * 0.6;
       this.boss.patternTimer = 0;
       this.boss.attackTimer = 0;
     }
@@ -550,7 +554,7 @@ export class BossManager {
 
       switch (this.boss.currentAttack) {
         case 'radial': {
-          const count = this.boss.phase >= 2 ? 16 : 12;
+          const count = (this.boss.phase >= 2 ? 16 : 12) + Math.min(6, Math.floor(this.difficulty / 6));
           if (Math.floor(this.boss.patternTimer / 300) > Math.floor((this.boss.patternTimer - deltaTime * 1000) / 300)) {
             for (let i = 0; i < count; i++) {
               const angle = (i / count) * Math.PI * 2 + this.boss.patternTimer * 0.002;
@@ -566,6 +570,9 @@ export class BossManager {
             if (this.boss.phase >= 3) {
               requests.push({ x: cx, y: cy, angle: angle - 0.15, type: 'aimed' });
               requests.push({ x: cx, y: cy, angle: angle + 0.15, type: 'aimed' });
+            } else if (this.difficulty >= 12) {
+              requests.push({ x: cx, y: cy, angle: angle - 0.12, type: 'aimed' });
+              requests.push({ x: cx, y: cy, angle: angle + 0.12, type: 'aimed' });
             }
           }
           break;
@@ -584,7 +591,7 @@ export class BossManager {
         case 'fan': {
           if (Math.floor(this.boss.patternTimer / 500) > Math.floor((this.boss.patternTimer - deltaTime * 1000) / 500)) {
             const baseAngle = Math.atan2(CONFIG.HEIGHT - cy, playerX - cx);
-            const fanCount = this.boss.phase >= 2 ? 7 : 5;
+            const fanCount = (this.boss.phase >= 2 ? 7 : 5) + Math.min(3, Math.floor(this.difficulty / 12));
             const spread = 0.8;
             for (let i = 0; i < fanCount; i++) {
               const t = (i / (fanCount - 1)) - 0.5;
@@ -608,7 +615,7 @@ export class BossManager {
         }
         case 'ring': {
           if (Math.floor(this.boss.patternTimer / 400) > Math.floor((this.boss.patternTimer - deltaTime * 1000) / 400)) {
-            const count = this.boss.phase >= 2 ? 20 : 14;
+            const count = (this.boss.phase >= 2 ? 20 : 14) + Math.min(4, Math.floor(this.difficulty / 10));
             for (let i = 0; i < count; i++) {
               const angle = (i / count) * Math.PI * 2;
               requests.push({ x: cx, y: cy, angle, speed: 3, type: 'ring' });
@@ -702,7 +709,9 @@ export class BossManager {
 
       if (this.boss.attackDuration <= 0) {
         this.boss.currentAttack = null;
-        this.boss.attackCooldown = 1000 + Math.random() * 1000;
+        // Faster follow-ups at high difficulty: the breather between attacks
+        // shrinks as waves climb (capped so it never becomes a wall of bullets).
+        this.boss.attackCooldown = Math.max(600, 1000 + Math.random() * 1000 - this.difficulty * 8);
       }
     }
 

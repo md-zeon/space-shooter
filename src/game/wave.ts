@@ -286,7 +286,6 @@ export class WaveManager {
   private currentWaveIndex: number = 0;
   private pendingSpawns: SpawnCommand[] = [];
   private spawnDelay: number = 0;
-  private nextSpawnTime: number = 0;
   private betweenWaves: boolean = false;
   private betweenWaveTimer: number = 0;
   private difficulty: number = 1;
@@ -1091,7 +1090,6 @@ export class WaveManager {
     // the authored openers so the researched 1-20 arc plays first.
     for (let w = authored.length + 1; w <= 200; w++) {
       const waveNum = w;
-      const tier = Math.min(Math.floor(waveNum / 3), 3);
 
       if (waveNum % 10 === 0) {
         this.waves.push({ groups: [], isBossWave: true, isBossPrep: false });
@@ -1104,31 +1102,38 @@ export class WaveManager {
       }
 
       const groups: WaveGroup[] = [];
-      // Monotonic-difficulty budget: group + enemy counts GROW with the wave and
-      // only vary by a narrow band, so later waves are consistently harder rather
-      // than randomly easier/harder run-to-run. waveNum also feeds the RNG seed
-      // so each specific wave keeps its own stable identity.
+      // Procedural difficulty must KEEP climbing for waves 101-200. The old
+      // `tier` caps at 3 and — since every procedural wave is >= 101 — it is
+      // pinned to its ceiling for the entire 101-200 range, so a wave at 110 and
+      // one at 190 use the identical enemy mix and group count. Now composition
+      // scales directly off `waveNum`, which does rise across 101-200, so later
+      // procedural waves field more groups, more elite/advanced pressure, a wider
+      // formation vocabulary, and a larger count budget the further you go.
       const rng = mulberry32(waveNum * 7919);
-      const numGroups = 1 + Math.min(tier, 2) + (rng() < 0.6 ? 1 : 0);
-      const budget = 8 + Math.floor(waveNum * 0.18);
+      const numGroups = Math.min(6, 1 + Math.floor(waveNum / 40) + (rng() < 0.6 ? 1 : 0));
+      // Monotonic budget: grows with the wave for every procedural wave (no
+      // plateau), so "wave N is harder than wave N-1" holds all the way to 200.
+      const budget = 8 + Math.floor(waveNum * 0.32);
+      // Elite share climbs from ~10% at wave 101 to ~22% at wave 200.
+      const eliteChance = Math.min(0.22, 0.1 + (waveNum - 100) * 0.0012);
 
       for (let g = 0; g < numGroups; g++) {
         let type: EnemyType = 'basic';
         const roll = Math.random();
-        if (tier >= 2 && roll > 0.85) type = 'elite';
-        else if (tier >= 1 && roll > 0.5) type = 'advanced';
+        if (roll > 1 - eliteChance) type = 'elite';
+        else if (roll > 0.4) type = 'advanced';
 
-        const maxFormationIndex = Math.min(FORMATION_POOL.length, 2 + tier * 2);
+        const maxFormationIndex = Math.min(FORMATION_POOL.length, 2 + Math.floor(waveNum / 25) * 2);
         const formation = FORMATION_POOL[Math.floor(rng() * maxFormationIndex)];
         // Split the wave budget across its groups; the last group eats the rest.
         const remaining = numGroups - g;
-        const count = Math.max(2, Math.round((budget / remaining) * (0.75 + rng() * 0.5)));
+        const count = Math.max(2, Math.round((budget / remaining) * (0.85 + rng() * 0.4)));
 
         groups.push({
           type,
           formation,
-          count: Math.min(count, 15),
-          delay: g * 800,
+          count: Math.min(count, 20),
+          delay: g * 700,
         });
       }
 
@@ -1229,15 +1234,26 @@ export class WaveManager {
     }
 
     this.spawnDelay -= Math.min(deltaTime * 1000, 100);
+    // `spawnDelay` counts down from 0, so elapsed ms since the wave started is
+    // `-this.spawnDelay`. Each spawn command carries an ABSOLUTE delay from the
+    // wave start (`group.delay + entryStagger`), so release a command once the
+    // elapsed time has reached its delay. This is the correct scheduling — the
+    // old code ACCUMULATED every command's delay into `nextSpawnTime`, so the
+    // Nth command's real spawn time became the SUM of all delays 1..N. With a
+    // late group (e.g. waves 31/39's bottom-entry ambush at delay 1200-1400) the
+    // tail enemies ended up waiting ~9-10s to appear — the whole wave "didn't
+    // come" and only periodic power-ups dropped.
+    //
     // Per-frame release budget: even when many commands are ready, only a few
     // are issued per tick so a large wave filters in across several frames
     // instead of bursting onto screen all at once. Surplus carries to later ticks.
     let releaseBudget = 5;
-    while (this.pendingSpawns.length > 0 && this.spawnDelay <= 0 && releaseBudget > 0) {
-      if (this.nextSpawnTime > -this.spawnDelay) break;
-      const cmd = this.pendingSpawns.shift()!;
+    const elapsed = -this.spawnDelay;
+    while (this.pendingSpawns.length > 0 && releaseBudget > 0) {
+      const cmd = this.pendingSpawns[0];
+      if (this.spawnDelay > 0 || cmd.delay > elapsed) break;
+      this.pendingSpawns.shift();
       newSpawns.push(cmd);
-      this.nextSpawnTime += Math.max(cmd.delay, 50);
       releaseBudget--;
     }
 
@@ -1277,7 +1293,6 @@ export class WaveManager {
     const commands = this.getSpawnCommands(wave, canvasWidth);
     this.pendingSpawns = commands;
     this.spawnDelay = 0;
-    this.nextSpawnTime = 0;
   }
 
   getWaveAnnouncement(): { wave: number; isBoss: boolean } | null {
@@ -1299,7 +1314,6 @@ export class WaveManager {
     this.currentWaveIndex = 0;
     this.pendingSpawns = [];
     this.spawnDelay = 0;
-    this.nextSpawnTime = 0;
     this.betweenWaves = false;
     this.betweenWaveTimer = 0;
     this.difficulty = 1;
