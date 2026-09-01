@@ -114,12 +114,15 @@ export class BulletPool {
   }
 
   release(bullet: Bullet) {
+    if (bullet.active === false) return;
     bullet.active = false;
+    // O(1) swap-remove: pool order is irrelevant and every consuming loop walks
+    // backward (or already broke/continued past the released element), so swap
+    // the tail element into the hole instead of shifting the whole array.
     const index = this.active.indexOf(bullet);
-    if (index > -1) {
-      this.active.splice(index, 1);
-      this.pool.push(bullet);
-    }
+    const last = this.active.pop()!;
+    if (index < this.active.length) this.active[index] = last;
+    this.pool.push(bullet);
   }
 
   update(deltaTime: number, canvasWidth: number, canvasHeight: number) {

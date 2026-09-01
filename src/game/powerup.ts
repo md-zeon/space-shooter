@@ -68,9 +68,13 @@ export class PowerUpManager {
   }
 
   remove(powerUp: PowerUp) {
+    if (powerUp.active === false) return;
     powerUp.active = false;
+    // O(1) swap-remove: `update` iterates backward by index, so swapping the
+    // tail element into the hole never reprocesses it.
     const index = this.powerUps.indexOf(powerUp);
-    if (index > -1) this.powerUps.splice(index, 1);
+    const last = this.powerUps.pop()!;
+    if (index < this.powerUps.length) this.powerUps[index] = last;
   }
 
   render(ctx: CanvasRenderingContext2D) {

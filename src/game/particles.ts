@@ -15,6 +15,7 @@ export interface Particle {
 
 export class ParticleSystem {
   private particles: Particle[] = [];
+  private free: number[] = [];
   private screenShake: number = 0;
   private hitstopTimer: number = 0;
   private flashAlpha: number = 0;
@@ -27,7 +28,22 @@ export class ParticleSystem {
   private preWarm(count: number) {
     for (let i = 0; i < count; i++) {
       this.particles.push(this.create());
+      this.free.push(i);
     }
+  }
+
+  /**
+   * O(1) slot allocation: pops the most-recently-recycled particle index off the
+   * free-stack, or grows the pool (up to the hard cap) when the stack is empty.
+   * Returns the particle, or null when the pool is exhausted.
+   */
+  private nextSlot(): Particle | null {
+    const index = this.free.pop();
+    if (index !== undefined) return this.particles[index];
+    if (this.particles.length >= CONFIG.MAX_PARTICLES * 2) return null;
+    const particle = this.create();
+    this.particles.push(particle);
+    return particle;
   }
 
   private create(): Particle {
@@ -58,12 +74,8 @@ export class ParticleSystem {
     const gravity = options?.gravity ?? 0;
 
     for (let i = 0; i < count; i++) {
-      let particle = this.particles.find((p) => !p.active);
-      if (!particle) {
-        if (this.particles.length >= CONFIG.MAX_PARTICLES * 2) continue;
-        particle = this.create();
-        this.particles.push(particle);
-      }
+      const particle = this.nextSlot();
+      if (!particle) continue;
 
       const angle = Math.random() * spread - spread / 2;
       const velocity = speed * (0.5 + Math.random() * 0.5);
@@ -114,12 +126,8 @@ export class ParticleSystem {
     decay: number
   ) {
     for (let i = 0; i < count; i++) {
-      let particle = this.particles.find((p) => !p.active);
-      if (!particle) {
-        if (this.particles.length >= CONFIG.MAX_PARTICLES * 2) continue;
-        particle = this.create();
-        this.particles.push(particle);
-      }
+      const particle = this.nextSlot();
+      if (!particle) continue;
       const angle = baseAngle + (Math.random() - 0.5) * spread;
       const velocity = speed * (0.6 + Math.random() * 0.6);
       particle.x = x;
@@ -260,7 +268,8 @@ export class ParticleSystem {
   update(deltaTime: number) {
     const dt60 = deltaTime * 60;
 
-    for (const particle of this.particles) {
+    for (let i = this.particles.length - 1; i >= 0; i--) {
+      const particle = this.particles[i];
       if (!particle.active) continue;
 
       particle.x += particle.vx * dt60;
@@ -271,6 +280,7 @@ export class ParticleSystem {
 
       if (particle.life <= 0) {
         particle.active = false;
+        this.free.push(i);
       }
     }
 
@@ -322,8 +332,10 @@ export class ParticleSystem {
   }
 
   clear() {
-    for (const particle of this.particles) {
-      particle.active = false;
+    this.free = [];
+    for (let i = 0; i < this.particles.length; i++) {
+      this.particles[i].active = false;
+      this.free.push(i);
     }
     this.screenShake = 0;
     this.hitstopTimer = 0;

@@ -833,9 +833,13 @@ export class EnemyManager {
   }
 
   remove(enemy: Enemy) {
+    if (enemy.active === false) return;
     enemy.active = false;
+    // O(1) swap-remove: iteration in `update` walks backward by index, so a
+    // tail element swapped into the hole is never reprocessed.
     const index = this.enemies.indexOf(enemy);
-    if (index > -1) this.enemies.splice(index, 1);
+    const last = this.enemies.pop()!;
+    if (index < this.enemies.length) this.enemies[index] = last;
   }
 
   /**
